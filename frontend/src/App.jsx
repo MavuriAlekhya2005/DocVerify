@@ -61,6 +61,9 @@ function App() {
         <Route path="/login" element={<Login />} />
         <Route path="/register" element={<Register />} />
         <Route path="/forgot-password" element={<ForgotPassword />} />
+        
+        {/* Redirect /verify to /verifier */}
+        <Route path="/verify" element={<VerifyPage />} />
         <Route path="/verify/:id" element={<VerifyPage />} />
         
         {/* User Dashboard Routes */}
@@ -80,11 +83,12 @@ function App() {
           <Route path="manage" element={<ManageCertificates />} />
         </Route>
         
-        {/* Verifier Dashboard Routes */}
+        {/* Verifier Dashboard Routes - Main verification portal */}
         <Route path="/verifier" element={<VerifierDashboard />}>
           <Route index element={<ScanVerify />} />
           <Route path="scan" element={<ScanVerify />} />
           <Route path="history" element={<VerificationHistory />} />
+          <Route path=":id" element={<ScanVerify />} />
         </Route>
       </Routes>
     </Router>
