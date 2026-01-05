@@ -26,7 +26,7 @@ export const api = {
     return response.json();
   },
 
-  // Verify certificate
+  // Verify certificate (tiered access)
   verify: async (certificateId, accessKey = '') => {
     const response = await fetch(`${API_URL}/verify`, {
       method: 'POST',
@@ -34,6 +34,17 @@ export const api = {
       body: JSON.stringify({ certificateId, accessKey }),
     });
     return response.json();
+  },
+
+  // Quick verify (primary details only)
+  quickVerify: async (certificateId) => {
+    const response = await fetch(`${API_URL}/verify/quick/${certificateId}`);
+    return response.json();
+  },
+
+  // Download document (requires access key)
+  getDownloadUrl: (certificateId, accessKey) => {
+    return `${API_URL}/download/${certificateId}?accessKey=${accessKey}`;
   },
 
   // Health check

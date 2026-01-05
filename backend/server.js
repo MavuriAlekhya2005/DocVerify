@@ -9,6 +9,7 @@ const fs = require('fs');
 const { v4: uuidv4 } = require('uuid');
 const QRCode = require('qrcode');
 const Certificate = require('./models/Certificate');
+const { extractDocumentData, validateIntegrity } = require('./services/documentExtractor');
 
 const app = express();
 
@@ -25,7 +26,7 @@ if (!fs.existsSync(uploadsDir)) {
 
 // Multer config
 const storage = multer.diskStorage({
-  destination: (req, file, cb) => cb(null, 'uploads/'),
+  destination: (req, file, cb) => cb(null, uploadsDir),
   filename: (req, file, cb) => cb(null, `${uuidv4()}${path.extname(file.originalname)}`),
 });
 
@@ -55,7 +56,7 @@ const generateHash = (filePath) => {
   return crypto.createHash('sha256').update(fileBuffer).digest('hex');
 };
 
-// POST /api/upload - Upload document and generate certificate
+// POST /api/upload - Upload document and generate certificate with AI extraction
 app.post('/api/upload', upload.single('document'), async (req, res) => {
   try {
     if (!req.file) {
@@ -74,10 +75,55 @@ app.post('/api/upload', upload.single('document'), async (req, res) => {
     const qrData = JSON.stringify({ certificateId, accessKey });
     const qrCode = await QRCode.toDataURL(qrData, { width: 300, margin: 2 });
 
-    // Save to database
+    // Extract document data using AI/ML
+    let extractedData = null;
+    let extractionStatus = 'pending';
+    let extractionError = null;
+
+    try {
+      extractedData = await extractDocumentData(filePath, req.file.mimetype);
+      extractionStatus = 'completed';
+      console.log(`Document extraction completed for ${certificateId} with confidence: ${extractedData.verificationSummary.confidenceScore}%`);
+    } catch (extractError) {
+      console.error('Extraction error:', extractError.message);
+      extractionStatus = 'failed';
+      extractionError = extractError.message;
+      // Create minimal extracted data structure
+      extractedData = {
+        primaryDetails: {
+          documentType: 'unknown',
+          fields: {},
+          hash: crypto.createHash('sha256').update('{}').digest('hex'),
+          extractedAt: new Date().toISOString(),
+          confidenceScore: 0,
+        },
+        fullDetails: {
+          rawText: '',
+          structuredData: {},
+          dates: [],
+          signatures: [],
+          lineCount: 0,
+          wordCount: 0,
+          pdfMetadata: {},
+          hash: crypto.createHash('sha256').update('{}').digest('hex'),
+          extractionMetadata: { textLength: 0, pages: 0, ocrConfidence: 0 },
+        },
+        verificationSummary: {
+          documentType: 'unknown',
+          holderName: 'Extraction failed',
+          documentNumber: 'N/A',
+          issueDate: 'N/A',
+          issuingAuthority: 'N/A',
+          confidenceScore: 0,
+          integrityHash: documentHash,
+        },
+      };
+    }
+
+    // Save to database with extracted data
     const certificate = await Certificate.create({
       certificateId,
-      title: title || 'Untitled Certificate',
+      title: title || extractedData.verificationSummary.qualification || 'Untitled Certificate',
       documentHash,
       accessKey,
       qrCode,
@@ -85,6 +131,12 @@ app.post('/api/upload', upload.single('document'), async (req, res) => {
       fileType: req.file.mimetype,
       fileSize: req.file.size,
       filePath: req.file.filename,
+      // Extracted data (two-tier storage)
+      primaryDetails: extractedData.primaryDetails,
+      fullDetails: extractedData.fullDetails,
+      verificationSummary: extractedData.verificationSummary,
+      extractionStatus,
+      extractionError,
     });
 
     res.status(201).json({
@@ -96,6 +148,13 @@ app.post('/api/upload', upload.single('document'), async (req, res) => {
         accessKey: certificate.accessKey,
         qrCode: certificate.qrCode,
         createdAt: certificate.createdAt,
+        // Include extraction info
+        extraction: {
+          status: extractionStatus,
+          confidenceScore: extractedData.verificationSummary.confidenceScore,
+          documentType: extractedData.primaryDetails.documentType,
+          detectedFields: Object.keys(extractedData.primaryDetails.fields).length,
+        },
       },
     });
   } catch (error) {
@@ -129,7 +188,7 @@ app.get('/api/certificates/:id', async (req, res) => {
   }
 });
 
-// POST /api/verify - Verify certificate with access key
+// POST /api/verify - Verify certificate with tiered access
 app.post('/api/verify', async (req, res) => {
   try {
     const { certificateId, accessKey } = req.body;
@@ -144,25 +203,157 @@ app.post('/api/verify', async (req, res) => {
       return res.status(404).json({ success: false, status: 'invalid', message: 'Certificate not found' });
     }
 
-    // Basic info always returned
+    // Update verification count
+    certificate.verificationCount += 1;
+    certificate.lastVerifiedAt = new Date();
+
+    // PARTIAL ACCESS - Basic verification (no access key required)
+    // Returns primary details suitable for quick verification / blockchain lookup
     const response = {
       success: true,
       status: 'valid',
+      accessLevel: 'partial',
       data: {
         certificateId: certificate.certificateId,
         title: certificate.title,
         documentHash: certificate.documentHash,
         createdAt: certificate.createdAt,
+        // Primary details for quick read
+        verificationSummary: certificate.verificationSummary,
+        primaryDetails: {
+          documentType: certificate.primaryDetails?.documentType,
+          confidenceScore: certificate.primaryDetails?.confidenceScore,
+          integrityHash: certificate.primaryDetails?.hash,
+          // Limited fields for partial access
+          fields: {
+            holderName: certificate.primaryDetails?.fields?.name || certificate.verificationSummary?.holderName,
+            documentNumber: certificate.primaryDetails?.fields?.documentNumber || certificate.verificationSummary?.documentNumber,
+            issuingAuthority: certificate.primaryDetails?.fields?.issuingAuthority || certificate.verificationSummary?.issuingAuthority,
+          },
+        },
+        extractionStatus: certificate.extractionStatus,
+        verificationCount: certificate.verificationCount,
       },
     };
 
-    // Full access with correct access key
+    // FULL ACCESS - Complete details (requires access key)
     if (accessKey && accessKey === certificate.accessKey) {
+      certificate.fullAccessCount += 1;
+      certificate.lastFullAccessAt = new Date();
+      
+      response.accessLevel = 'full';
       response.data.qrCode = certificate.qrCode;
       response.data.fullAccess = true;
+      
+      // Include complete primary details
+      response.data.primaryDetails = certificate.primaryDetails;
+      
+      // Include full details from database
+      response.data.fullDetails = {
+        structuredData: certificate.fullDetails?.structuredData,
+        dates: certificate.fullDetails?.dates,
+        signatures: certificate.fullDetails?.signatures,
+        wordCount: certificate.fullDetails?.wordCount,
+        lineCount: certificate.fullDetails?.lineCount,
+        extractionMetadata: certificate.fullDetails?.extractionMetadata,
+        integrityHash: certificate.fullDetails?.hash,
+      };
+      
+      // Include file info for download
+      response.data.fileInfo = {
+        originalFilename: certificate.originalFilename,
+        fileType: certificate.fileType,
+        fileSize: certificate.fileSize,
+        downloadAvailable: !!certificate.filePath && fs.existsSync(path.join(uploadsDir, certificate.filePath)),
+      };
+      
+      // Access statistics
+      response.data.accessStats = {
+        verificationCount: certificate.verificationCount,
+        fullAccessCount: certificate.fullAccessCount,
+        downloadCount: certificate.downloadCount,
+        lastVerifiedAt: certificate.lastVerifiedAt,
+        lastFullAccessAt: certificate.lastFullAccessAt,
+      };
     }
 
+    await certificate.save();
     res.json(response);
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+// GET /api/download/:id - Download original document (requires access key)
+app.get('/api/download/:id', async (req, res) => {
+  try {
+    const { accessKey } = req.query;
+    const certificate = await Certificate.findOne({ certificateId: req.params.id });
+
+    if (!certificate) {
+      return res.status(404).json({ success: false, message: 'Certificate not found' });
+    }
+
+    if (!accessKey || accessKey !== certificate.accessKey) {
+      return res.status(403).json({ success: false, message: 'Valid access key required for download' });
+    }
+
+    const filePath = path.join(uploadsDir, certificate.filePath);
+    
+    if (!fs.existsSync(filePath)) {
+      return res.status(404).json({ success: false, message: 'Document file not found' });
+    }
+
+    // Update download count
+    certificate.downloadCount += 1;
+    await certificate.save();
+
+    // Set headers for download
+    res.setHeader('Content-Disposition', `attachment; filename="${certificate.originalFilename}"`);
+    res.setHeader('Content-Type', certificate.fileType);
+    
+    // Stream the file
+    const fileStream = fs.createReadStream(filePath);
+    fileStream.pipe(res);
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+// GET /api/verify/quick/:id - Quick verification (primary details only, no access key)
+app.get('/api/verify/quick/:id', async (req, res) => {
+  try {
+    const certificate = await Certificate.findOne(
+      { certificateId: req.params.id },
+      'certificateId title documentHash verificationSummary primaryDetails.documentType primaryDetails.confidenceScore primaryDetails.hash extractionStatus createdAt'
+    );
+
+    if (!certificate) {
+      return res.status(404).json({ success: false, status: 'invalid', message: 'Certificate not found' });
+    }
+
+    // Increment verification count
+    await Certificate.updateOne(
+      { certificateId: req.params.id },
+      { $inc: { verificationCount: 1 }, lastVerifiedAt: new Date() }
+    );
+
+    res.json({
+      success: true,
+      status: 'valid',
+      accessLevel: 'quick',
+      data: {
+        certificateId: certificate.certificateId,
+        title: certificate.title,
+        documentHash: certificate.documentHash,
+        verificationSummary: certificate.verificationSummary,
+        documentType: certificate.primaryDetails?.documentType,
+        confidenceScore: certificate.primaryDetails?.confidenceScore,
+        integrityHash: certificate.primaryDetails?.hash,
+        extractionStatus: certificate.extractionStatus,
+        createdAt: certificate.createdAt,
+      },
+    });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
   }
@@ -177,18 +368,39 @@ app.get('/api/health', (req, res) => {
 app.get('/', (req, res) => {
   res.json({
     success: true,
-    message: 'DocVerify API',
+    message: 'DocVerify API - Document Verification with AI Extraction',
+    version: '2.0.0',
     endpoints: {
-      upload: 'POST /api/upload',
-      certificates: 'GET /api/certificates',
-      certificate: 'GET /api/certificates/:id',
-      verify: 'POST /api/verify',
+      upload: 'POST /api/upload - Upload & extract document data',
+      certificates: 'GET /api/certificates - List all certificates',
+      certificate: 'GET /api/certificates/:id - Get single certificate',
+      verify: 'POST /api/verify - Verify with tiered access (partial/full)',
+      quickVerify: 'GET /api/verify/quick/:id - Quick verification (primary details)',
+      download: 'GET /api/download/:id?accessKey=KEY - Download document (full access)',
       health: 'GET /api/health',
+    },
+    accessLevels: {
+      quick: 'Primary details only - fast verification',
+      partial: 'Verification summary without access key',
+      full: 'Complete details + download with access key',
     },
   });
 });
 
 const PORT = process.env.PORT || 5000;
-app.listen(PORT, () => {
+const server = app.listen(PORT, '0.0.0.0', () => {
   console.log(`Server running on port ${PORT}`);
+});
+
+// Keep the server alive and handle errors
+server.on('error', (err) => {
+  console.error('Server error:', err);
+});
+
+process.on('uncaughtException', (err) => {
+  console.error('Uncaught exception:', err);
+});
+
+process.on('unhandledRejection', (err) => {
+  console.error('Unhandled rejection:', err);
 });

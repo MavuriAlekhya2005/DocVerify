@@ -13,10 +13,16 @@ import {
   HiExternalLink,
   HiDownload,
   HiShare,
-  HiInformationCircle
+  HiInformationCircle,
+  HiUser,
+  HiCalendar,
+  HiOfficeBuilding,
+  HiAcademicCap,
+  HiClipboardCheck
 } from 'react-icons/hi';
 import Logo from '../components/Logo';
 import toast, { Toaster } from 'react-hot-toast';
+import api from '../services/api';
 
 const VerifyPage = () => {
   const { id } = useParams();
@@ -26,38 +32,53 @@ const VerifyPage = () => {
   const [accessKey, setAccessKey] = useState('');
   const [isUnlocked, setIsUnlocked] = useState(false);
   const [showAccessKeyModal, setShowAccessKeyModal] = useState(false);
+  const [verificationData, setVerificationData] = useState(null);
+  const [accessLevel, setAccessLevel] = useState('partial');
 
   useEffect(() => {
-    // Simulate fetching certificate data
     const fetchCertificate = async () => {
-      setIsLoading(true);
-      await new Promise(r => setTimeout(r, 1500));
+      if (!id) {
+        setIsLoading(false);
+        return;
+      }
       
-      // Mock certificate data
-      if (id) {
-        setCertificate({
-          id: id,
-          status: 'verified',
-          title: 'Bachelor of Computer Science',
-          recipient: 'John Doe',
-          issuer: 'Stanford University',
-          issuerLogo: null,
-          issueDate: '2024-05-15',
-          expiryDate: null,
-          hash: '0x7f83b1657ff1fc53b92dc18148a1d65dfc2d4b1fa3d677284addd200126d9069',
-          blockNumber: 18234567,
-          transactionHash: '0x1234...abcd',
-          aiScore: 98.7,
-          merkleRoot: '0xabc...123',
-          description: 'This certificate is awarded to John Doe for successfully completing the Bachelor of Computer Science program with honors.',
-          metadata: {
-            gpa: '3.85',
-            major: 'Computer Science',
-            minor: 'Mathematics',
-            honors: 'Cum Laude',
-          },
-        });
-      } else {
+      setIsLoading(true);
+      try {
+        // Call the real API for verification
+        const result = await api.verify(id);
+        
+        if (result.success && result.status === 'valid') {
+          setVerificationData(result);
+          setAccessLevel(result.accessLevel || 'partial');
+          setCertificate({
+            id: result.data.certificateId,
+            status: 'verified',
+            title: result.data.title,
+            recipient: result.data.verificationSummary?.holderName || 'Not detected',
+            issuer: result.data.verificationSummary?.issuingAuthority || 'Not detected',
+            issueDate: result.data.verificationSummary?.issueDate || result.data.createdAt,
+            expiryDate: result.data.verificationSummary?.validUntil,
+            hash: result.data.documentHash,
+            documentType: result.data.verificationSummary?.documentType || result.data.primaryDetails?.documentType || 'general',
+            aiScore: result.data.verificationSummary?.confidenceScore || result.data.primaryDetails?.confidenceScore || 0,
+            documentNumber: result.data.verificationSummary?.documentNumber || 'Not detected',
+            qualification: result.data.verificationSummary?.qualification,
+            grade: result.data.verificationSummary?.grade,
+            integrityHash: result.data.verificationSummary?.integrityHash || result.data.primaryDetails?.hash,
+            extractionStatus: result.data.extractionStatus,
+            verificationCount: result.data.verificationCount,
+            primaryDetails: result.data.primaryDetails,
+            fullDetails: result.data.fullDetails,
+            fileInfo: result.data.fileInfo,
+            accessStats: result.data.accessStats,
+            qrCode: result.data.qrCode,
+          });
+        } else {
+          setCertificate(null);
+        }
+      } catch (error) {
+        console.error('Verification error:', error);
+        toast.error('Failed to verify certificate');
         setCertificate(null);
       }
       setIsLoading(false);
@@ -66,14 +87,55 @@ const VerifyPage = () => {
     fetchCertificate();
   }, [id]);
 
-  const handleUnlock = (e) => {
+  const handleUnlock = async (e) => {
     e.preventDefault();
-    if (accessKey === 'demo123' || accessKey.length >= 6) {
-      setIsUnlocked(true);
-      setShowAccessKeyModal(false);
-      toast.success('Full certificate access granted!');
-    } else {
-      toast.error('Invalid access key');
+    if (!accessKey) {
+      toast.error('Please enter an access key');
+      return;
+    }
+    
+    try {
+      // Call API with access key for full access
+      const result = await api.verify(id, accessKey);
+      
+      if (result.success && result.accessLevel === 'full') {
+        setVerificationData(result);
+        setAccessLevel('full');
+        setIsUnlocked(true);
+        setShowAccessKeyModal(false);
+        
+        // Update certificate with full details
+        setCertificate(prev => ({
+          ...prev,
+          primaryDetails: result.data.primaryDetails,
+          fullDetails: result.data.fullDetails,
+          fileInfo: result.data.fileInfo,
+          accessStats: result.data.accessStats,
+          qrCode: result.data.qrCode,
+        }));
+        
+        toast.success('Full certificate access granted!');
+      } else {
+        toast.error('Invalid access key');
+      }
+    } catch (error) {
+      console.error('Unlock error:', error);
+      toast.error('Failed to unlock certificate');
+    }
+  };
+
+  const handleDownload = async () => {
+    if (!isUnlocked || !accessKey) {
+      toast.error('Please unlock the certificate first');
+      return;
+    }
+    
+    try {
+      const downloadUrl = `http://localhost:5000/api/download/${id}?accessKey=${accessKey}`;
+      window.open(downloadUrl, '_blank');
+      toast.success('Download started!');
+    } catch (error) {
+      toast.error('Failed to download document');
     }
   };
 
@@ -185,37 +247,86 @@ const VerifyPage = () => {
               <div className="flex items-start gap-4 mb-6">
                 <div className="w-14 h-14 rounded-xl bg-gradient-to-br from-primary-600 to-accent-600 
                   flex items-center justify-center text-white text-xl font-bold flex-shrink-0">
-                  SU
+                  <HiDocumentText className="w-7 h-7" />
                 </div>
                 <div>
                   <h2 className="text-xl font-bold text-white mb-1">{certificate.title}</h2>
-                  <p className="text-gray-400">Issued by {certificate.issuer}</p>
+                  <p className="text-gray-400">
+                    {certificate.documentType !== 'general' ? (
+                      <span className="capitalize">{certificate.documentType} Document</span>
+                    ) : 'Document Certificate'}
+                  </p>
                 </div>
               </div>
 
+              {/* Primary Extracted Details - Always Visible */}
               <div className="grid sm:grid-cols-2 gap-4">
                 <div className="bg-white/5 rounded-xl p-4">
-                  <p className="text-gray-500 text-xs mb-1">Recipient</p>
+                  <div className="flex items-center gap-2 mb-1">
+                    <HiUser className="w-4 h-4 text-primary-400" />
+                    <p className="text-gray-500 text-xs">Holder Name</p>
+                  </div>
                   <p className="text-white font-medium">{certificate.recipient}</p>
                 </div>
                 <div className="bg-white/5 rounded-xl p-4">
-                  <p className="text-gray-500 text-xs mb-1">Issue Date</p>
+                  <div className="flex items-center gap-2 mb-1">
+                    <HiClipboardCheck className="w-4 h-4 text-accent-400" />
+                    <p className="text-gray-500 text-xs">Document Number</p>
+                  </div>
+                  <p className="text-white font-medium">{certificate.documentNumber}</p>
+                </div>
+                <div className="bg-white/5 rounded-xl p-4">
+                  <div className="flex items-center gap-2 mb-1">
+                    <HiOfficeBuilding className="w-4 h-4 text-yellow-400" />
+                    <p className="text-gray-500 text-xs">Issuing Authority</p>
+                  </div>
+                  <p className="text-white font-medium">{certificate.issuer}</p>
+                </div>
+                <div className="bg-white/5 rounded-xl p-4">
+                  <div className="flex items-center gap-2 mb-1">
+                    <HiCalendar className="w-4 h-4 text-green-400" />
+                    <p className="text-gray-500 text-xs">Issue Date</p>
+                  </div>
                   <p className="text-white font-medium">
-                    {new Date(certificate.issueDate).toLocaleDateString('en-US', {
-                      year: 'numeric',
-                      month: 'long',
-                      day: 'numeric',
-                    })}
+                    {certificate.issueDate && certificate.issueDate !== 'Not detected' 
+                      ? (certificate.issueDate.includes('T') 
+                          ? new Date(certificate.issueDate).toLocaleDateString('en-US', {
+                              year: 'numeric',
+                              month: 'long',
+                              day: 'numeric',
+                            })
+                          : certificate.issueDate)
+                      : 'Not detected'}
                   </p>
                 </div>
+                {certificate.qualification && (
+                  <div className="bg-white/5 rounded-xl p-4">
+                    <div className="flex items-center gap-2 mb-1">
+                      <HiAcademicCap className="w-4 h-4 text-purple-400" />
+                      <p className="text-gray-500 text-xs">Qualification</p>
+                    </div>
+                    <p className="text-white font-medium">{certificate.qualification}</p>
+                  </div>
+                )}
+                {certificate.grade && (
+                  <div className="bg-white/5 rounded-xl p-4">
+                    <div className="flex items-center gap-2 mb-1">
+                      <HiShieldCheck className="w-4 h-4 text-pink-400" />
+                      <p className="text-gray-500 text-xs">Grade/Result</p>
+                    </div>
+                    <p className="text-white font-medium">{certificate.grade}</p>
+                  </div>
+                )}
                 <div className="bg-white/5 rounded-xl p-4">
                   <p className="text-gray-500 text-xs mb-1">Certificate ID</p>
                   <p className="text-white font-mono text-sm">{certificate.id}</p>
                 </div>
                 <div className="bg-white/5 rounded-xl p-4">
-                  <p className="text-gray-500 text-xs mb-1">Expiry</p>
+                  <p className="text-gray-500 text-xs mb-1">Valid Until</p>
                   <p className="text-white font-medium">
-                    {certificate.expiryDate ? new Date(certificate.expiryDate).toLocaleDateString() : 'No Expiry'}
+                    {certificate.expiryDate && certificate.expiryDate !== 'Not specified' 
+                      ? certificate.expiryDate 
+                      : 'No Expiry'}
                   </p>
                 </div>
               </div>
@@ -223,37 +334,61 @@ const VerifyPage = () => {
 
             {/* Verification Details */}
             <div className="bg-dark-100/50 rounded-2xl border border-white/10 p-6">
-              <h3 className="text-lg font-semibold text-white mb-4">Verification Details</h3>
+              <h3 className="text-lg font-semibold text-white mb-4">Extraction & Verification Details</h3>
               <div className="space-y-3">
                 <div className="flex items-center justify-between p-3 bg-white/5 rounded-xl">
                   <div className="flex items-center gap-3">
                     <HiShieldCheck className="w-5 h-5 text-accent-500" />
-                    <span className="text-gray-300">AI Authenticity Score</span>
+                    <span className="text-gray-300">AI Extraction Confidence</span>
                   </div>
                   <div className="flex items-center gap-2">
                     <div className="w-24 h-2 bg-white/10 rounded-full overflow-hidden">
                       <div 
-                        className="h-full bg-gradient-to-r from-accent-500 to-accent-400 rounded-full"
+                        className={`h-full rounded-full ${
+                          certificate.aiScore >= 70 
+                            ? 'bg-gradient-to-r from-accent-500 to-accent-400' 
+                            : certificate.aiScore >= 40 
+                              ? 'bg-gradient-to-r from-yellow-500 to-yellow-400'
+                              : 'bg-gradient-to-r from-red-500 to-red-400'
+                        }`}
                         style={{ width: `${certificate.aiScore}%` }}
                       ></div>
                     </div>
-                    <span className="text-accent-400 font-medium">{certificate.aiScore}%</span>
+                    <span className={`font-medium ${
+                      certificate.aiScore >= 70 ? 'text-accent-400' : 
+                      certificate.aiScore >= 40 ? 'text-yellow-400' : 'text-red-400'
+                    }`}>{certificate.aiScore}%</span>
                   </div>
                 </div>
                 <div className="flex items-center justify-between p-3 bg-white/5 rounded-xl">
                   <div className="flex items-center gap-3">
                     <HiCube className="w-5 h-5 text-primary-400" />
-                    <span className="text-gray-300">Blockchain Block</span>
+                    <span className="text-gray-300">Extraction Status</span>
                   </div>
-                  <span className="text-primary-400 font-medium">#{certificate.blockNumber}</span>
+                  <span className={`font-medium capitalize ${
+                    certificate.extractionStatus === 'completed' ? 'text-accent-400' : 
+                    certificate.extractionStatus === 'failed' ? 'text-red-400' : 'text-yellow-400'
+                  }`}>
+                    {certificate.extractionStatus || 'Unknown'} 
+                    {certificate.extractionStatus === 'completed' && ' ✓'}
+                  </span>
                 </div>
                 <div className="flex items-center justify-between p-3 bg-white/5 rounded-xl">
                   <div className="flex items-center gap-3">
                     <HiDocumentText className="w-5 h-5 text-yellow-400" />
-                    <span className="text-gray-300">Merkle Proof</span>
+                    <span className="text-gray-300">Document Type</span>
                   </div>
-                  <span className="text-yellow-400 font-medium">Verified ✓</span>
+                  <span className="text-yellow-400 font-medium capitalize">{certificate.documentType}</span>
                 </div>
+                {certificate.verificationCount && (
+                  <div className="flex items-center justify-between p-3 bg-white/5 rounded-xl">
+                    <div className="flex items-center gap-3">
+                      <HiCheckCircle className="w-5 h-5 text-blue-400" />
+                      <span className="text-gray-300">Times Verified</span>
+                    </div>
+                    <span className="text-blue-400 font-medium">{certificate.verificationCount}</span>
+                  </div>
+                )}
               </div>
             </div>
 
@@ -274,9 +409,9 @@ const VerifyPage = () => {
                     <div className="w-14 h-14 mx-auto mb-4 rounded-2xl bg-white/10 flex items-center justify-center">
                       <HiLockClosed className="w-7 h-7 text-gray-400" />
                     </div>
-                    <h3 className="text-white font-semibold mb-2">Protected Content</h3>
+                    <h3 className="text-white font-semibold mb-2">Full Details Locked</h3>
                     <p className="text-gray-400 text-sm mb-4">
-                      Enter the access key to view full certificate details
+                      Enter access key to view complete extracted data & download document
                     </p>
                     <button 
                       onClick={() => setShowAccessKeyModal(true)}
@@ -288,8 +423,8 @@ const VerifyPage = () => {
                   </div>
                 </div>
                 <div className="opacity-50 blur-sm">
-                  <h3 className="text-lg font-semibold text-white mb-4">Additional Details</h3>
-                  <p className="text-gray-400">{certificate.description}</p>
+                  <h3 className="text-lg font-semibold text-white mb-4">Full Extracted Details</h3>
+                  <p className="text-gray-400">Complete document data, structured fields, signatures, and download access...</p>
                 </div>
               </div>
             )}
@@ -301,24 +436,135 @@ const VerifyPage = () => {
                 className="bg-dark-100/50 rounded-2xl border border-white/10 p-6"
               >
                 <div className="flex items-center gap-2 mb-4">
-                  <h3 className="text-lg font-semibold text-white">Full Certificate Details</h3>
-                  <span className="px-2 py-0.5 bg-accent-600/20 text-accent-400 text-xs rounded-full">Unlocked</span>
+                  <h3 className="text-lg font-semibold text-white">Full Extracted Details</h3>
+                  <span className="px-2 py-0.5 bg-accent-600/20 text-accent-400 text-xs rounded-full">Full Access</span>
                 </div>
-                <p className="text-gray-400 mb-6">{certificate.description}</p>
                 
-                <div className="grid sm:grid-cols-2 gap-4 mb-6">
-                  {Object.entries(certificate.metadata).map(([key, value]) => (
-                    <div key={key} className="bg-white/5 rounded-xl p-4">
-                      <p className="text-gray-500 text-xs mb-1 capitalize">{key.replace('_', ' ')}</p>
-                      <p className="text-white font-medium">{value}</p>
+                {/* All Primary Fields */}
+                {certificate.primaryDetails?.fields && Object.keys(certificate.primaryDetails.fields).length > 0 && (
+                  <div className="mb-6">
+                    <h4 className="text-sm font-medium text-gray-400 mb-3">All Extracted Fields</h4>
+                    <div className="grid sm:grid-cols-2 gap-3">
+                      {Object.entries(certificate.primaryDetails.fields).map(([key, value]) => (
+                        value && (
+                          <div key={key} className="bg-white/5 rounded-xl p-3">
+                            <p className="text-gray-500 text-xs mb-1 capitalize">{key.replace(/([A-Z])/g, ' $1').trim()}</p>
+                            <p className="text-white font-medium text-sm">{value}</p>
+                          </div>
+                        )
+                      ))}
                     </div>
-                  ))}
-                </div>
+                  </div>
+                )}
 
-                <button className="btn-primary w-full sm:w-auto">
-                  <HiDownload className="w-5 h-5 mr-2 inline" />
-                  Download Full Certificate
-                </button>
+                {/* Full Details - Structured Data */}
+                {certificate.fullDetails?.structuredData && Object.keys(certificate.fullDetails.structuredData).length > 0 && (
+                  <div className="mb-6">
+                    <h4 className="text-sm font-medium text-gray-400 mb-3">Structured Data</h4>
+                    <div className="grid sm:grid-cols-2 gap-3">
+                      {Object.entries(certificate.fullDetails.structuredData).map(([key, value]) => (
+                        <div key={key} className="bg-white/5 rounded-xl p-3">
+                          <p className="text-gray-500 text-xs mb-1 capitalize">{key.replace(/_/g, ' ')}</p>
+                          <p className="text-white font-medium text-sm">{value}</p>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Dates Found */}
+                {certificate.fullDetails?.dates && certificate.fullDetails.dates.length > 0 && (
+                  <div className="mb-6">
+                    <h4 className="text-sm font-medium text-gray-400 mb-3">Dates Found in Document</h4>
+                    <div className="flex flex-wrap gap-2">
+                      {certificate.fullDetails.dates.map((date, idx) => (
+                        <span key={idx} className="px-3 py-1 bg-primary-600/20 text-primary-400 rounded-full text-sm">
+                          {date}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Signatures */}
+                {certificate.fullDetails?.signatures && certificate.fullDetails.signatures.length > 0 && (
+                  <div className="mb-6">
+                    <h4 className="text-sm font-medium text-gray-400 mb-3">Signatures/Authorizations</h4>
+                    <div className="flex flex-wrap gap-2">
+                      {certificate.fullDetails.signatures.map((sig, idx) => (
+                        <span key={idx} className="px-3 py-1 bg-accent-600/20 text-accent-400 rounded-full text-sm">
+                          {sig}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Document Stats */}
+                {certificate.fullDetails && (
+                  <div className="mb-6">
+                    <h4 className="text-sm font-medium text-gray-400 mb-3">Document Statistics</h4>
+                    <div className="grid grid-cols-3 gap-3">
+                      <div className="bg-white/5 rounded-xl p-3 text-center">
+                        <p className="text-2xl font-bold text-white">{certificate.fullDetails.wordCount || 0}</p>
+                        <p className="text-gray-500 text-xs">Words</p>
+                      </div>
+                      <div className="bg-white/5 rounded-xl p-3 text-center">
+                        <p className="text-2xl font-bold text-white">{certificate.fullDetails.lineCount || 0}</p>
+                        <p className="text-gray-500 text-xs">Lines</p>
+                      </div>
+                      <div className="bg-white/5 rounded-xl p-3 text-center">
+                        <p className="text-2xl font-bold text-white">{certificate.fullDetails.extractionMetadata?.pages || 1}</p>
+                        <p className="text-gray-500 text-xs">Pages</p>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* File Info & Download */}
+                {certificate.fileInfo && (
+                  <div className="mb-6 p-4 bg-white/5 rounded-xl">
+                    <h4 className="text-sm font-medium text-gray-400 mb-3">Original Document</h4>
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-white font-medium">{certificate.fileInfo.originalFilename}</p>
+                        <p className="text-gray-500 text-sm">
+                          {certificate.fileInfo.fileType} • {(certificate.fileInfo.fileSize / 1024).toFixed(1)} KB
+                        </p>
+                      </div>
+                      {certificate.fileInfo.downloadAvailable && (
+                        <button 
+                          onClick={handleDownload}
+                          className="btn-primary"
+                        >
+                          <HiDownload className="w-5 h-5 mr-2 inline" />
+                          Download
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {/* Access Statistics */}
+                {certificate.accessStats && (
+                  <div className="p-4 bg-primary-600/10 rounded-xl border border-primary-500/20">
+                    <h4 className="text-sm font-medium text-primary-400 mb-3">Access Statistics</h4>
+                    <div className="grid grid-cols-3 gap-4 text-center">
+                      <div>
+                        <p className="text-xl font-bold text-white">{certificate.accessStats.verificationCount}</p>
+                        <p className="text-gray-500 text-xs">Verifications</p>
+                      </div>
+                      <div>
+                        <p className="text-xl font-bold text-white">{certificate.accessStats.fullAccessCount}</p>
+                        <p className="text-gray-500 text-xs">Full Access</p>
+                      </div>
+                      <div>
+                        <p className="text-xl font-bold text-white">{certificate.accessStats.downloadCount}</p>
+                        <p className="text-gray-500 text-xs">Downloads</p>
+                      </div>
+                    </div>
+                  </div>
+                )}
               </motion.div>
             )}
           </motion.div>
@@ -334,10 +580,14 @@ const VerifyPage = () => {
             <div className="bg-dark-100/50 rounded-2xl border border-white/10 p-6">
               <h3 className="text-lg font-semibold text-white mb-4 text-center">Verification QR</h3>
               <div className="bg-white p-4 rounded-xl mx-auto w-fit">
-                <QRCode value={window.location.href} size={160} />
+                {isUnlocked && certificate.qrCode ? (
+                  <img src={certificate.qrCode} alt="Certificate QR" className="w-40 h-40" />
+                ) : (
+                  <QRCode value={window.location.href} size={160} />
+                )}
               </div>
               <p className="text-gray-500 text-xs text-center mt-4">
-                Scan to verify this certificate
+                {isUnlocked ? 'Original certificate QR code' : 'Scan to verify this certificate'}
               </p>
             </div>
 
@@ -353,23 +603,26 @@ const VerifyPage = () => {
                   <HiShare className="w-5 h-5" />
                   <span>Share Verification Link</span>
                 </button>
-                <a 
-                  href={`https://etherscan.io/tx/${certificate.transactionHash}`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="w-full flex items-center gap-3 p-3 rounded-xl bg-white/5 text-gray-300 
-                    hover:bg-white/10 transition-colors"
-                >
-                  <HiExternalLink className="w-5 h-5" />
-                  <span>View on Etherscan</span>
-                </a>
-                <button 
-                  className="w-full flex items-center gap-3 p-3 rounded-xl bg-white/5 text-gray-300 
-                    hover:bg-white/10 transition-colors text-left"
-                >
-                  <HiDownload className="w-5 h-5" />
-                  <span>Download Proof</span>
-                </button>
+                {!isUnlocked && (
+                  <button 
+                    onClick={() => setShowAccessKeyModal(true)}
+                    className="w-full flex items-center gap-3 p-3 rounded-xl bg-white/5 text-gray-300 
+                      hover:bg-white/10 transition-colors text-left"
+                  >
+                    <HiKey className="w-5 h-5" />
+                    <span>Unlock Full Details</span>
+                  </button>
+                )}
+                {isUnlocked && certificate.fileInfo?.downloadAvailable && (
+                  <button 
+                    onClick={handleDownload}
+                    className="w-full flex items-center gap-3 p-3 rounded-xl bg-white/5 text-gray-300 
+                      hover:bg-white/10 transition-colors text-left"
+                  >
+                    <HiDownload className="w-5 h-5" />
+                    <span>Download Document</span>
+                  </button>
+                )}
               </div>
             </div>
 

@@ -1,0 +1,7 @@
+Certificate of Achievement
+Name: John Doe
+Document Number: CERT-2026-001
+Issue Date: 01/05/2026
+Issuing Authority: DocVerify University
+Course: Bachelor of Computer Science
+Grade: First Class
