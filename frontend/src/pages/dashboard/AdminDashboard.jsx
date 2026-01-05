@@ -14,6 +14,7 @@ import {
   HiUserGroup
 } from 'react-icons/hi';
 import Logo from '../../components/Logo';
+import PortalSwitcher from '../../components/PortalSwitcher';
 
 const AdminDashboard = () => {
   const navigate = useNavigate();
@@ -62,7 +63,8 @@ const AdminDashboard = () => {
           ))}
         </nav>
 
-        <div className="p-4 border-t border-white/10">
+        <div className="p-4 border-t border-white/10 space-y-3">
+          <PortalSwitcher />
           <button
             onClick={handleLogout}
             className="flex items-center gap-3 px-4 py-3 w-full text-gray-400 hover:text-red-400 
