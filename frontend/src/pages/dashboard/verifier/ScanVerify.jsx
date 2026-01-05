@@ -569,6 +569,100 @@ const ScanVerify = () => {
               </div>
             </div>
 
+            {/* Full Details Section - Shows when unlocked */}
+            {accessLevel === 'full' && verificationResult.certificate.fullDetails && (
+              <div className="bg-accent-600/10 border border-accent-500/30 rounded-2xl p-6">
+                <div className="flex items-center gap-3 mb-4">
+                  <HiCheckCircle className="w-5 h-5 text-accent-400" />
+                  <h3 className="text-lg font-semibold text-white">Full Access Granted</h3>
+                </div>
+                
+                {/* Full Details Grid */}
+                <div className="space-y-4">
+                  {/* Structured Data */}
+                  {verificationResult.certificate.fullDetails.structuredData && 
+                   Object.keys(verificationResult.certificate.fullDetails.structuredData).length > 0 && (
+                    <div>
+                      <p className="text-gray-400 text-sm mb-2">Extracted Data</p>
+                      <div className="grid sm:grid-cols-2 gap-3">
+                        {Object.entries(verificationResult.certificate.fullDetails.structuredData).map(([key, value]) => (
+                          <div key={key} className="bg-white/5 rounded-lg p-3">
+                            <p className="text-gray-500 text-xs capitalize mb-1">{key.replace(/_/g, ' ')}</p>
+                            <p className="text-white text-sm">{value}</p>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                  
+                  {/* File Info */}
+                  {verificationResult.certificate.fileInfo && (
+                    <div>
+                      <p className="text-gray-400 text-sm mb-2">File Information</p>
+                      <div className="grid sm:grid-cols-3 gap-3">
+                        <div className="bg-white/5 rounded-lg p-3">
+                          <p className="text-gray-500 text-xs mb-1">Filename</p>
+                          <p className="text-white text-sm truncate">{verificationResult.certificate.fileInfo.originalFilename}</p>
+                        </div>
+                        <div className="bg-white/5 rounded-lg p-3">
+                          <p className="text-gray-500 text-xs mb-1">File Type</p>
+                          <p className="text-white text-sm">{verificationResult.certificate.fileInfo.fileType}</p>
+                        </div>
+                        <div className="bg-white/5 rounded-lg p-3">
+                          <p className="text-gray-500 text-xs mb-1">File Size</p>
+                          <p className="text-white text-sm">{(verificationResult.certificate.fileInfo.fileSize / 1024).toFixed(2)} KB</p>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                  
+                  {/* Access Stats */}
+                  {verificationResult.certificate.accessStats && (
+                    <div>
+                      <p className="text-gray-400 text-sm mb-2">Access Statistics</p>
+                      <div className="grid sm:grid-cols-2 gap-3">
+                        <div className="bg-white/5 rounded-lg p-3">
+                          <p className="text-gray-500 text-xs mb-1">Total Verifications</p>
+                          <p className="text-white text-sm">{verificationResult.certificate.accessStats.verificationCount}</p>
+                        </div>
+                        <div className="bg-white/5 rounded-lg p-3">
+                          <p className="text-gray-500 text-xs mb-1">Full Access Count</p>
+                          <p className="text-white text-sm">{verificationResult.certificate.accessStats.fullAccessCount}</p>
+                        </div>
+                        <div className="bg-white/5 rounded-lg p-3">
+                          <p className="text-gray-500 text-xs mb-1">Download Count</p>
+                          <p className="text-white text-sm">{verificationResult.certificate.accessStats.downloadCount}</p>
+                        </div>
+                        {verificationResult.certificate.accessStats.lastFullAccessAt && (
+                          <div className="bg-white/5 rounded-lg p-3">
+                            <p className="text-gray-500 text-xs mb-1">Last Full Access</p>
+                            <p className="text-white text-sm">
+                              {new Date(verificationResult.certificate.accessStats.lastFullAccessAt).toLocaleString()}
+                            </p>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                  
+                  {/* Download Button */}
+                  {verificationResult.certificate.fileInfo?.downloadAvailable && (
+                    <div className="pt-2">
+                      <a 
+                        href={`http://localhost:5000/api/download/${verificationResult.certificate.certificateId}?accessKey=${accessKey}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="btn-primary inline-flex items-center gap-2"
+                      >
+                        <HiDownload className="w-5 h-5" />
+                        Download Original Document
+                      </a>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
             {/* Unlock Full Access */}
             {accessLevel === 'partial' && (
               <div className="bg-primary-600/10 border border-primary-500/30 rounded-2xl p-6">
