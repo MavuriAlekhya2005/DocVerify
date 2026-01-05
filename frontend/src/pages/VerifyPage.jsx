@@ -44,8 +44,10 @@ const VerifyPage = () => {
       
       setIsLoading(true);
       try {
+        console.log('Verifying certificate:', id);
         // Call the real API for verification
         const result = await api.verify(id);
+        console.log('Verification result:', result);
         
         if (result.success && result.status === 'valid') {
           setVerificationData(result);
@@ -54,14 +56,14 @@ const VerifyPage = () => {
             id: result.data.certificateId,
             status: 'verified',
             title: result.data.title,
-            recipient: result.data.verificationSummary?.holderName || 'Not detected',
-            issuer: result.data.verificationSummary?.issuingAuthority || 'Not detected',
+            recipient: result.data.verificationSummary?.holderName || result.data.primaryDetails?.fields?.holderName || 'Not detected',
+            issuer: result.data.verificationSummary?.issuingAuthority || result.data.primaryDetails?.fields?.issuingAuthority || 'Not detected',
             issueDate: result.data.verificationSummary?.issueDate || result.data.createdAt,
             expiryDate: result.data.verificationSummary?.validUntil,
             hash: result.data.documentHash,
             documentType: result.data.verificationSummary?.documentType || result.data.primaryDetails?.documentType || 'general',
-            aiScore: result.data.verificationSummary?.confidenceScore || result.data.primaryDetails?.confidenceScore || 0,
-            documentNumber: result.data.verificationSummary?.documentNumber || 'Not detected',
+            aiScore: result.data.verificationSummary?.confidenceScore ?? result.data.primaryDetails?.confidenceScore ?? 0,
+            documentNumber: result.data.verificationSummary?.documentNumber || result.data.primaryDetails?.fields?.documentNumber || 'Not detected',
             qualification: result.data.verificationSummary?.qualification,
             grade: result.data.verificationSummary?.grade,
             integrityHash: result.data.verificationSummary?.integrityHash || result.data.primaryDetails?.hash,
@@ -73,12 +75,14 @@ const VerifyPage = () => {
             accessStats: result.data.accessStats,
             qrCode: result.data.qrCode,
           });
+          console.log('Certificate set successfully');
         } else {
+          console.log('Invalid result:', result);
           setCertificate(null);
         }
       } catch (error) {
         console.error('Verification error:', error);
-        toast.error('Failed to verify certificate');
+        toast.error('Failed to verify certificate: ' + error.message);
         setCertificate(null);
       }
       setIsLoading(false);

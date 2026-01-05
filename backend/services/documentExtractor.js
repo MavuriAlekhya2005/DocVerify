@@ -14,8 +14,10 @@ const crypto = require('crypto');
 const PRIMARY_FIELD_PATTERNS = {
   // Identity & Personal Info
   name: [
-    /(?:name|full\s*name|holder|recipient|issued\s*to|awarded\s*to)[:\s]*([A-Z][a-z]+(?:\s+[A-Z][a-z]+){1,3})/gi,
+    /(?:name|full\s*name|holder|recipient|issued\s*to|awarded\s*to|certify\s*that)[:\s]*\n*([A-Z][a-z]+(?:\s+[A-Z][a-z]+){1,3})/gi,
+    /(?:certify\s*that|is\s*to\s*certify\s*that)[:\s]*\n*([A-Z][A-Z\s]+[A-Z])\b/gi,
     /(?:Mr\.|Mrs\.|Ms\.|Dr\.)\s*([A-Z][a-z]+(?:\s+[A-Z][a-z]+){1,2})/gi,
+    /\b([A-Z][A-Z]+\s+[A-Z][A-Z]+)\b(?=\s*\n*\s*(?:has|have|completed|successfully|is\s*awarded))/gi,
   ],
   dateOfBirth: [
     /(?:date\s*of\s*birth|dob|birth\s*date|born)[:\s]*(\d{1,2}[-\/]\d{1,2}[-\/]\d{2,4})/gi,
@@ -32,6 +34,7 @@ const PRIMARY_FIELD_PATTERNS = {
   issueDate: [
     /(?:issue\s*date|date\s*of\s*issue|dated|issued\s*on)[:\s]*(\d{1,2}[-\/]\d{1,2}[-\/]\d{2,4})/gi,
     /(?:issue\s*date|dated)[:\s]*(\d{1,2}\s+\w+\s+\d{4})/gi,
+    /(?:issue\s*date|dated)[:\s]*(\w+\s+\d{1,2},?\s+\d{4})/gi,
   ],
   expiryDate: [
     /(?:expiry\s*date|valid\s*(?:until|till|through)|expires?\s*on?)[:\s]*(\d{1,2}[-\/]\d{1,2}[-\/]\d{2,4})/gi,
@@ -40,7 +43,8 @@ const PRIMARY_FIELD_PATTERNS = {
   
   // Issuing Authority
   issuingAuthority: [
-    /(?:issued\s*by|issuing\s*authority|authority|organization|institution|university|college)[:\s]*([A-Z][A-Za-z\s&,\.]+(?:University|College|Institute|Board|Council|Authority|Organization|Government|Ministry|Department))/gi,
+    /(?:issued\s*by|issuing\s*authority|authority|organization|institution|university|college)[:\s]*([A-Z][A-Za-z\s&,\.]+(?:University|College|Institute|Board|Council|Authority|Organization|Government|Ministry|Department|International|Academy))/gi,
+    /(?:issued\s*by)[:\s]*([A-Z][A-Za-z\s&,\.]+)/gi,
   ],
   
   // Qualification/Purpose
@@ -131,7 +135,17 @@ function extractPrimaryFields(text) {
       pattern.lastIndex = 0;
       const match = pattern.exec(text);
       if (match && match[1]) {
-        extracted[field] = match[1].trim();
+        // Clean up extracted value - remove line breaks and extra text
+        let value = match[1].trim();
+        // For name field, only keep the first line (actual name)
+        if (field === 'name' && value.includes('\n')) {
+          value = value.split('\n')[0].trim();
+        }
+        // For qualification field, limit to reasonable length
+        if (field === 'qualification' && value.length > 100) {
+          value = value.substring(0, 100).trim();
+        }
+        extracted[field] = value;
         break;
       } else if (match && !match[1]) {
         // For patterns without capture groups (like grade classifications)
@@ -225,6 +239,22 @@ function calculateConfidenceScore(primaryFields, fullDetails) {
 }
 
 /**
+ * Extract text from plain text file
+ */
+function extractTextFromTextFile(filePath) {
+  try {
+    const text = fs.readFileSync(filePath, 'utf8');
+    return {
+      text: text,
+      lines: text.split('\n').length,
+    };
+  } catch (error) {
+    console.error('Text file extraction error:', error.message);
+    return { text: '', lines: 0 };
+  }
+}
+
+/**
  * Main extraction function
  */
 async function extractDocumentData(filePath, fileType) {
@@ -235,6 +265,8 @@ async function extractDocumentData(filePath, fileType) {
     extractedText = await extractTextFromPDF(filePath);
   } else if (fileType.startsWith('image/')) {
     extractedText = await extractTextFromImage(filePath);
+  } else if (fileType === 'text/plain' || fileType.startsWith('text/')) {
+    extractedText = extractTextFromTextFile(filePath);
   }
   
   const text = extractedText.text || '';
