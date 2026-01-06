@@ -15,22 +15,30 @@ import {
 } from 'react-icons/hi';
 import Logo from '../../components/Logo';
 import PortalSwitcher from '../../components/PortalSwitcher';
+import api from '../../services/api';
 
 const AdminDashboard = () => {
   const navigate = useNavigate();
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const user = api.getCurrentUser();
 
   const menuItems = [
     { name: 'Analytics', icon: HiChartBar, path: '/admin' },
-    { name: 'Issue Certificate', icon: HiDocumentAdd, path: '/admin/issue' },
+    { name: 'Issue Document', icon: HiDocumentAdd, path: '/admin/issue' },
     { name: 'Bulk Issuance', icon: HiDocumentDuplicate, path: '/admin/bulk-issue' },
-    { name: 'Manage Certificates', icon: HiCollection, path: '/admin/manage' },
+    { name: 'Manage Documents', icon: HiCollection, path: '/admin/manage' },
     { name: 'Users', icon: HiUserGroup, path: '/admin/users' },
     { name: 'Settings', icon: HiCog, path: '/admin/settings' },
   ];
 
   const handleLogout = () => {
+    api.logout();
     navigate('/login');
+  };
+
+  const getInitials = (name) => {
+    if (!name) return 'AD';
+    return name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2);
   };
 
   return (
@@ -151,17 +159,16 @@ const AdminDashboard = () => {
             <div className="flex items-center gap-4">
               <button className="relative text-gray-400 hover:text-white p-2 rounded-xl hover:bg-white/5">
                 <HiBell className="w-6 h-6" />
-                <span className="absolute top-1 right-1 w-2 h-2 bg-red-500 rounded-full"></span>
               </button>
               
               <div className="flex items-center gap-3">
                 <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-primary-600 to-accent-600 
                   flex items-center justify-center text-white font-bold">
-                  AD
+                  {getInitials(user?.name)}
                 </div>
                 <div className="hidden sm:block">
-                  <div className="text-white font-medium text-sm">Admin User</div>
-                  <div className="text-gray-400 text-xs">Stanford University</div>
+                  <div className="text-white font-medium text-sm">{user?.name || 'Admin'}</div>
+                  <div className="text-gray-400 text-xs capitalize">{user?.role || 'admin'}</div>
                 </div>
               </div>
             </div>

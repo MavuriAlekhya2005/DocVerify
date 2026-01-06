@@ -54,7 +54,7 @@ const CertificateDetails = () => {
       <div className="flex items-center justify-center min-h-[60vh]">
         <div className="text-center">
           <div className="w-12 h-12 mx-auto mb-4 border-4 border-primary-600/30 border-t-primary-600 rounded-full animate-spin"></div>
-          <p className="text-gray-400">Loading certificate...</p>
+          <p className="text-gray-400">Loading document...</p>
         </div>
       </div>
     );
@@ -65,10 +65,10 @@ const CertificateDetails = () => {
       <div className="flex items-center justify-center min-h-[60vh]">
         <div className="text-center">
           <HiDocumentText className="w-16 h-16 text-gray-600 mx-auto mb-4" />
-          <h3 className="text-white text-lg font-medium mb-2">Certificate not found</h3>
-          <p className="text-gray-400 mb-4">The certificate you're looking for doesn't exist.</p>
+          <h3 className="text-white text-lg font-medium mb-2">Document not found</h3>
+          <p className="text-gray-400 mb-4">The document you're looking for doesn't exist.</p>
           <Link to="/dashboard/certificates" className="btn-primary">
-            Back to Certificates
+            Back to Documents
           </Link>
         </div>
       </div>
@@ -86,8 +86,8 @@ const CertificateDetails = () => {
           <HiArrowLeft className="w-5 h-5" />
         </Link>
         <div className="flex-1">
-          <h1 className="text-2xl font-bold text-white">Certificate Details</h1>
-          <p className="text-gray-400">View your certificate information</p>
+          <h1 className="text-2xl font-bold text-white">Document Details</h1>
+          <p className="text-gray-400">View your document information</p>
         </div>
         <button onClick={fetchCertificate} className="btn-secondary">
           <HiRefresh className="w-5 h-5 mr-2 inline" />

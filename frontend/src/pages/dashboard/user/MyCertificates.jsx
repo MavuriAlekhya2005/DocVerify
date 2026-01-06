@@ -48,8 +48,8 @@ const MyCertificates = () => {
     <div>
       <div className="mb-8 flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-white mb-2">My Certificates</h1>
-          <p className="text-gray-400">View your uploaded certificates</p>
+          <h1 className="text-2xl font-bold text-white mb-2">My Documents</h1>
+          <p className="text-gray-400">View your uploaded documents</p>
         </div>
         <button onClick={fetchCertificates} className="btn-secondary">
           <HiRefresh className="w-5 h-5 mr-2 inline" />
@@ -91,10 +91,10 @@ const MyCertificates = () => {
       {loading ? (
         <div className="text-center py-12">
           <div className="w-12 h-12 mx-auto mb-4 border-4 border-primary-600/30 border-t-primary-600 rounded-full animate-spin"></div>
-          <p className="text-gray-400">Loading certificates...</p>
+          <p className="text-gray-400">Loading documents...</p>
         </div>
       ) : (
-        /* Certificates List */
+        /* Documents List */
         <div className="space-y-4">
           {filteredCertificates.map((cert, index) => (
             <motion.div
@@ -156,9 +156,9 @@ const MyCertificates = () => {
           {filteredCertificates.length === 0 && (
             <div className="text-center py-12">
               <HiDocumentText className="w-16 h-16 text-gray-600 mx-auto mb-4" />
-              <h3 className="text-white text-lg font-medium mb-2">No certificates found</h3>
+              <h3 className="text-white text-lg font-medium mb-2">No documents found</h3>
               <p className="text-gray-400">
-                {searchQuery ? 'Try adjusting your search criteria' : 'Upload your first certificate to get started'}
+                {searchQuery ? 'Try adjusting your search criteria' : 'Upload your first document to get started'}
               </p>
             </div>
           )}

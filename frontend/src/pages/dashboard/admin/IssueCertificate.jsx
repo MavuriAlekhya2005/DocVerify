@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { motion } from 'framer-motion';
+import QRCode from 'react-qr-code';
 import { 
   HiUser,
   HiMail,
@@ -8,26 +9,28 @@ import {
   HiDocumentText,
   HiCheckCircle,
   HiCube,
-  HiQrcode
+  HiQrcode,
+  HiDownload,
+  HiKey
 } from 'react-icons/hi';
 import toast from 'react-hot-toast';
+import api from '../../../services/api';
 
 const IssueCertificate = () => {
   const [formData, setFormData] = useState({
     recipientName: '',
     recipientEmail: '',
-    certificateType: 'degree',
-    certificateTitle: '',
+    documentType: 'degree',
+    documentTitle: '',
     issueDate: '',
     expiryDate: '',
     description: '',
     grade: '',
-    additionalFields: {},
   });
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [issuedCertificate, setIssuedCertificate] = useState(null);
+  const [issuedDocument, setIssuedDocument] = useState(null);
 
-  const certificateTypes = [
+  const documentTypes = [
     { value: 'degree', label: 'Academic Degree' },
     { value: 'diploma', label: 'Diploma' },
     { value: 'certification', label: 'Professional Certification' },
@@ -45,37 +48,57 @@ const IssueCertificate = () => {
     e.preventDefault();
     setIsSubmitting(true);
 
-    // Simulate certificate issuance
-    await new Promise(r => setTimeout(r, 2000));
-
-    setIssuedCertificate({
-      id: 'CERT-' + Math.random().toString(36).substr(2, 8).toUpperCase(),
-      hash: '0x' + Array(64).fill(0).map(() => Math.floor(Math.random() * 16).toString(16)).join(''),
-      qrCode: 'DOC-' + Math.random().toString(36).substr(2, 8).toUpperCase(),
-      accessKey: Array(4).fill(0).map(() => Math.random().toString(36).substr(2, 4).toUpperCase()).join('-'),
-      blockNumber: Math.floor(Math.random() * 1000000) + 18000000,
-    });
+    try {
+      const result = await api.issueCertificate(formData);
+      
+      if (result.success) {
+        setIssuedDocument(result.data);
+        toast.success('Document issued successfully!');
+      } else {
+        toast.error(result.message || 'Failed to issue document');
+      }
+    } catch (error) {
+      toast.error('Failed to issue document. Please try again.');
+    }
 
     setIsSubmitting(false);
-    toast.success('Certificate issued successfully!');
   };
 
   const resetForm = () => {
     setFormData({
       recipientName: '',
       recipientEmail: '',
-      certificateType: 'degree',
-      certificateTitle: '',
+      documentType: 'degree',
+      documentTitle: '',
       issueDate: '',
       expiryDate: '',
       description: '',
       grade: '',
-      additionalFields: {},
     });
-    setIssuedCertificate(null);
+    setIssuedDocument(null);
   };
 
-  if (issuedCertificate) {
+  const downloadQR = () => {
+    const svg = document.getElementById('qr-code');
+    const svgData = new XMLSerializer().serializeToString(svg);
+    const canvas = document.createElement('canvas');
+    const ctx = canvas.getContext('2d');
+    const img = new Image();
+    img.onload = () => {
+      canvas.width = img.width;
+      canvas.height = img.height;
+      ctx.fillStyle = 'white';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      ctx.drawImage(img, 0, 0);
+      const link = document.createElement('a');
+      link.download = `${issuedDocument.certificateId}-qr.png`;
+      link.href = canvas.toDataURL('image/png');
+      link.click();
+    };
+    img.src = 'data:image/svg+xml;base64,' + btoa(svgData);
+  };
+
+  if (issuedDocument) {
     return (
       <motion.div
         initial={{ opacity: 0, y: 20 }}
@@ -86,55 +109,64 @@ const IssueCertificate = () => {
           <div className="w-20 h-20 mx-auto mb-6 rounded-full bg-accent-600/20 flex items-center justify-center">
             <HiCheckCircle className="w-12 h-12 text-accent-500" />
           </div>
-          <h2 className="text-2xl font-bold text-white mb-2">Certificate Issued!</h2>
-          <p className="text-gray-400 mb-8">The certificate has been created and stored on the blockchain</p>
+          <h2 className="text-2xl font-bold text-white mb-2">Document Issued!</h2>
+          <p className="text-gray-400 mb-8">The document has been created and stored successfully</p>
 
           <div className="grid md:grid-cols-2 gap-6 mb-8 text-left">
             <div className="bg-white/5 rounded-xl p-4 border border-white/10">
               <div className="flex items-center gap-2 text-gray-400 text-sm mb-2">
                 <HiDocumentText className="w-4 h-4" />
-                Certificate ID
+                Document ID
               </div>
-              <p className="text-white font-mono">{issuedCertificate.id}</p>
+              <p className="text-white font-mono">{issuedDocument.certificateId}</p>
             </div>
 
             <div className="bg-white/5 rounded-xl p-4 border border-white/10">
               <div className="flex items-center gap-2 text-gray-400 text-sm mb-2">
-                <HiCube className="w-4 h-4" />
-                Block Number
+                <HiKey className="w-4 h-4" />
+                Access Key
               </div>
-              <p className="text-white">#{issuedCertificate.blockNumber}</p>
+              <p className="text-yellow-400 font-mono text-sm">{issuedDocument.accessKey}</p>
             </div>
 
             <div className="bg-white/5 rounded-xl p-4 border border-white/10 md:col-span-2">
               <div className="flex items-center gap-2 text-gray-400 text-sm mb-2">
                 <HiQrcode className="w-4 h-4" />
-                Verification Details
+                QR Code for Verification
               </div>
-              <div className="grid sm:grid-cols-2 gap-4">
-                <div>
-                  <p className="text-gray-500 text-xs">QR Code</p>
-                  <p className="text-white font-mono">{issuedCertificate.qrCode}</p>
-                </div>
-                <div>
-                  <p className="text-gray-500 text-xs">Access Key</p>
-                  <p className="text-yellow-400 font-mono">{issuedCertificate.accessKey}</p>
+              <div className="flex justify-center my-4">
+                <div className="bg-white p-4 rounded-xl">
+                  <QRCode
+                    id="qr-code"
+                    value={JSON.stringify({ certificateId: issuedDocument.certificateId, accessKey: issuedDocument.accessKey })}
+                    size={150}
+                  />
                 </div>
               </div>
+              <button
+                onClick={downloadQR}
+                className="flex items-center gap-2 mx-auto text-primary-400 hover:text-primary-300 text-sm"
+              >
+                <HiDownload className="w-4 h-4" />
+                Download QR Code
+              </button>
             </div>
 
             <div className="bg-white/5 rounded-xl p-4 border border-white/10 md:col-span-2">
               <div className="text-gray-400 text-sm mb-2">Document Hash</div>
-              <p className="text-white font-mono text-xs break-all">{issuedCertificate.hash}</p>
+              <p className="text-white font-mono text-xs break-all">{issuedDocument.documentHash}</p>
             </div>
+          </div>
+
+          <div className="bg-yellow-600/10 border border-yellow-500/20 rounded-xl p-4 mb-6">
+            <p className="text-yellow-400 text-sm">
+              <strong>Important:</strong> Save the Access Key securely. It's required for full document verification and download.
+            </p>
           </div>
 
           <div className="flex gap-4 justify-center">
             <button onClick={resetForm} className="btn-secondary">
               Issue Another
-            </button>
-            <button className="btn-primary">
-              Send to Recipient
             </button>
           </div>
         </div>
@@ -145,8 +177,8 @@ const IssueCertificate = () => {
   return (
     <div className="max-w-3xl mx-auto">
       <div className="mb-8">
-        <h1 className="text-2xl font-bold text-white mb-2">Issue Certificate</h1>
-        <p className="text-gray-400">Create and issue a new verified certificate</p>
+        <h1 className="text-2xl font-bold text-white mb-2">Issue Document</h1>
+        <p className="text-gray-400">Create and issue a new verified document</p>
       </div>
 
       <motion.form

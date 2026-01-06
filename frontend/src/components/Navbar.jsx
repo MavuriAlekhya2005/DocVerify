@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { HiMenu, HiX, HiShieldCheck, HiUpload, HiCollection, HiUserCircle, HiCog } from 'react-icons/hi';
+import { HiMenu, HiX, HiShieldCheck, HiUpload, HiCollection, HiCog } from 'react-icons/hi';
 import Logo from './Logo';
 
 const Navbar = () => {
@@ -25,14 +25,13 @@ const Navbar = () => {
     { name: 'Features', href: '#features' },
     { name: 'How It Works', href: '#how-it-works' },
     { name: 'Security', href: '#security' },
-    { name: 'Pricing', href: '#pricing' },
   ];
 
   // Main app nav links
   const appLinks = [
     { name: 'Verify', href: '/verifier', icon: HiShieldCheck },
     { name: 'Upload', href: '/dashboard/upload', icon: HiUpload },
-    { name: 'My Certificates', href: '/dashboard/certificates', icon: HiCollection },
+    { name: 'My Documents', href: '/dashboard/certificates', icon: HiCollection },
     { name: 'Admin', href: '/admin', icon: HiCog },
   ];
 
@@ -120,7 +119,7 @@ const Navbar = () => {
                   to="/dashboard"
                   className="flex items-center gap-2 text-gray-300 hover:text-white px-3 py-2 rounded-lg hover:bg-white/5"
                 >
-                  <HiUserCircle className="w-5 h-5" />
+                  <Logo className="w-6 h-6" />
                 </Link>
               </>
             )}

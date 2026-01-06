@@ -12,10 +12,17 @@ import {
 } from 'react-icons/hi';
 import Logo from '../../components/Logo';
 import PortalSwitcher from '../../components/PortalSwitcher';
+import api from '../../services/api';
 
 const VerifierDashboard = () => {
   const navigate = useNavigate();
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const user = api.getCurrentUser();
+
+  const getInitials = (name) => {
+    if (!name) return 'V';
+    return name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2);
+  };
 
   const menuItems = [
     { name: 'Scan & Verify', icon: HiQrcode, path: '/verifier' },
@@ -24,6 +31,7 @@ const VerifierDashboard = () => {
   ];
 
   const handleLogout = () => {
+    api.logout();
     navigate('/login');
   };
 
@@ -143,11 +151,11 @@ const VerifierDashboard = () => {
               <div className="flex items-center gap-3">
                 <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-accent-600 to-primary-600 
                   flex items-center justify-center text-white font-bold">
-                  HR
+                  {getInitials(user?.name)}
                 </div>
                 <div className="hidden sm:block">
-                  <div className="text-white font-medium text-sm">HR Team</div>
-                  <div className="text-gray-400 text-xs">TechCorp Inc.</div>
+                  <div className="text-white font-medium text-sm">{user?.name || 'Verifier'}</div>
+                  <div className="text-gray-400 text-xs capitalize">{user?.role || 'verifier'}</div>
                 </div>
               </div>
             </div>

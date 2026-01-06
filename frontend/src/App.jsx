@@ -6,7 +6,11 @@ import LandingPage from './pages/LandingPage';
 import Login from './pages/auth/Login';
 import Register from './pages/auth/Register';
 import ForgotPassword from './pages/auth/ForgotPassword';
+import AuthCallback from './pages/auth/AuthCallback';
 import VerifyPage from './pages/VerifyPage';
+
+// Components
+import ProtectedRoute from './components/ProtectedRoute';
 
 // Dashboard Pages
 import UserDashboard from './pages/dashboard/UserDashboard';
@@ -61,21 +65,30 @@ function App() {
         <Route path="/login" element={<Login />} />
         <Route path="/register" element={<Register />} />
         <Route path="/forgot-password" element={<ForgotPassword />} />
+        <Route path="/auth/callback" element={<AuthCallback />} />
         
-        {/* Redirect /verify to /verifier */}
+        {/* Public verification routes */}
         <Route path="/verify" element={<VerifyPage />} />
         <Route path="/verify/:id" element={<VerifyPage />} />
         
-        {/* User Dashboard Routes */}
-        <Route path="/dashboard" element={<UserDashboard />}>
+        {/* Protected User Dashboard Routes */}
+        <Route path="/dashboard" element={
+          <ProtectedRoute allowedRoles={['user', 'institution', 'admin']}>
+            <UserDashboard />
+          </ProtectedRoute>
+        }>
           <Route index element={<MyCertificates />} />
           <Route path="upload" element={<UploadCertificate />} />
           <Route path="certificates" element={<MyCertificates />} />
           <Route path="certificates/:id" element={<CertificateDetails />} />
         </Route>
         
-        {/* Admin Dashboard Routes */}
-        <Route path="/admin" element={<AdminDashboard />}>
+        {/* Protected Admin Dashboard Routes */}
+        <Route path="/admin" element={
+          <ProtectedRoute allowedRoles={['admin', 'institution']}>
+            <AdminDashboard />
+          </ProtectedRoute>
+        }>
           <Route index element={<Analytics />} />
           <Route path="analytics" element={<Analytics />} />
           <Route path="issue" element={<IssueCertificate />} />
@@ -83,8 +96,12 @@ function App() {
           <Route path="manage" element={<ManageCertificates />} />
         </Route>
         
-        {/* Verifier Dashboard Routes - Main verification portal */}
-        <Route path="/verifier" element={<VerifierDashboard />}>
+        {/* Protected Verifier Dashboard Routes */}
+        <Route path="/verifier" element={
+          <ProtectedRoute allowedRoles={['verifier', 'admin', 'institution', 'user']}>
+            <VerifierDashboard />
+          </ProtectedRoute>
+        }>
           <Route index element={<ScanVerify />} />
           <Route path="scan" element={<ScanVerify />} />
           <Route path="history" element={<VerificationHistory />} />

@@ -18,7 +18,6 @@ import Navbar from '../components/Navbar';
 import Footer from '../components/Footer';
 import FeatureCard from '../components/FeatureCard';
 import StepCard from '../components/StepCard';
-import PricingCard from '../components/PricingCard';
 import StatCard from '../components/StatCard';
 
 const LandingPage = () => {
@@ -31,34 +30,34 @@ const LandingPage = () => {
     {
       icon: HiCube,
       title: 'Blockchain Verification',
-      description: 'Immutable SHA-256 hashes stored on blockchain ensure certificates cannot be forged or altered after issuance.',
+      description: 'Immutable SHA-256 hashes stored on blockchain ensure documents cannot be forged or altered after issuance.',
     },
     {
       icon: HiQrcode,
       title: 'Instant QR Verification',
-      description: 'Generate unique QR codes for each certificate enabling instant verification from any device, anywhere.',
+      description: 'Generate unique QR codes for each document enabling instant verification from any device, anywhere.',
     },
     {
       icon: HiLockClosed,
       title: 'Secure Access Keys',
-      description: 'Private access keys ensure only authorized parties can view full certificate details and documents.',
+      description: 'Private access keys ensure only authorized parties can view full document details and files.',
     },
     {
       icon: HiDocumentDuplicate,
       title: 'Bulk Issuance',
-      description: 'Issue up to 500 certificates at once via CSV upload with Merkle tree batch anchoring for cost efficiency.',
+      description: 'Issue up to 500 documents at once via CSV upload with Merkle tree batch anchoring for cost efficiency.',
     },
     {
       icon: HiCloud,
       title: 'Cloud Storage',
-      description: 'Secure cloud storage with encryption ensures your certificates are always accessible and protected.',
+      description: 'Secure cloud storage with encryption ensures your documents are always accessible and protected.',
     },
   ];
 
   const steps = [
     {
-      title: 'Upload Certificate',
-      description: 'Upload your certificate in PDF or image format. Our system accepts various document types.',
+      title: 'Upload Document',
+      description: 'Upload your document in PDF or image format. Our system accepts various document types.',
     },
     {
       title: 'AI Analysis',
@@ -82,53 +81,8 @@ const LandingPage = () => {
     },
   ];
 
-  const pricingPlans = [
-    {
-      name: 'Starter',
-      price: 0,
-      description: 'Perfect for individuals',
-      features: [
-        'Up to 10 certificates/month',
-        'AI forgery detection',
-        'Basic blockchain verification',
-        'QR code generation',
-        'Email support',
-      ],
-    },
-    {
-      name: 'Professional',
-      price: 49,
-      description: 'For small organizations',
-      isPopular: true,
-      features: [
-        'Up to 500 certificates/month',
-        'Advanced AI analysis',
-        'Merkle batch anchoring',
-        'Bulk CSV issuance',
-        'API access',
-        'Priority support',
-        'Custom branding',
-      ],
-    },
-    {
-      name: 'Enterprise',
-      price: 199,
-      description: 'For large institutions',
-      features: [
-        'Unlimited certificates',
-        'Dedicated blockchain node',
-        'Advanced analytics',
-        'Multi-admin support',
-        'SLA guarantee',
-        '24/7 phone support',
-        'On-premise deployment',
-        'Custom integrations',
-      ],
-    },
-  ];
-
   const stats = [
-    { value: '10M+', label: 'Certificates Verified', icon: HiDocumentText },
+    { value: '10M+', label: 'Documents Verified', icon: HiDocumentText },
     { value: '5000+', label: 'Institutions', icon: HiUserGroup },
     { value: '99.9%', label: 'Uptime', icon: HiLightningBolt },
     { value: '150+', label: 'Countries', icon: HiGlobe },
@@ -153,25 +107,13 @@ const LandingPage = () => {
 
         <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-20">
           <div className="text-center">
-            <motion.div
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.6 }}
-            >
-              <span className="inline-flex items-center gap-2 bg-primary-600/10 border border-primary-500/20 
-                rounded-full px-4 py-2 text-sm text-primary-400 mb-8">
-                <HiShieldCheck className="w-4 h-4" />
-                Trusted by 5000+ institutions worldwide
-              </span>
-            </motion.div>
-
             <motion.h1
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.6, delay: 0.1 }}
               className="text-5xl md:text-7xl font-bold text-white font-display mb-6 leading-tight"
             >
-              Secure Certificate
+              Secure Document
               <br />
               <span className="gradient-text">Verification System</span>
             </motion.h1>
@@ -183,7 +125,7 @@ const LandingPage = () => {
               className="text-xl text-gray-400 max-w-3xl mx-auto mb-10 leading-relaxed"
             >
               Combine AI-powered forgery detection with blockchain immutability 
-              to create tamper-proof certificates that can be instantly verified by anyone, anywhere.
+              to create tamper-proof documents that can be instantly verified by anyone, anywhere.
             </motion.p>
 
             <motion.div
@@ -193,9 +135,9 @@ const LandingPage = () => {
               className="flex flex-col sm:flex-row gap-4 justify-center"
             >
               <Link to="/register" className="btn-primary text-lg px-8 py-4">
-                Start Issuing Certificates
+                Start Issuing Documents
               </Link>
-              <Link to="/verify/demo" className="btn-secondary text-lg px-8 py-4">
+              <Link to="/verifier" className="btn-secondary text-lg px-8 py-4">
                 Try Verification Demo
               </Link>
             </motion.div>
@@ -493,33 +435,6 @@ const LandingPage = () => {
         </div>
       </section>
 
-      {/* Pricing Section */}
-      <section id="pricing" className="py-24 bg-dark-200/50">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true }}
-            className="text-center mb-16"
-          >
-            <span className="text-primary-400 font-semibold text-sm uppercase tracking-wider">Pricing</span>
-            <h2 className="text-4xl md:text-5xl font-bold text-white font-display mt-4 mb-6">
-              Simple, Transparent Pricing
-            </h2>
-            <p className="text-gray-400 text-lg max-w-2xl mx-auto">
-              Choose the plan that fits your needs. All plans include our core 
-              AI verification and blockchain anchoring features.
-            </p>
-          </motion.div>
-
-          <div className="grid md:grid-cols-3 gap-8 max-w-5xl mx-auto">
-            {pricingPlans.map((plan, index) => (
-              <PricingCard key={index} {...plan} delay={index * 0.1} />
-            ))}
-          </div>
-        </div>
-      </section>
-
       {/* CTA Section */}
       <section className="py-24">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -533,11 +448,11 @@ const LandingPage = () => {
             <div className="relative bg-gradient-to-r from-primary-600/10 to-accent-600/10 rounded-3xl 
               border border-white/10 p-12 md:p-16 text-center">
               <h2 className="text-3xl md:text-5xl font-bold text-white font-display mb-6">
-                Ready to Secure Your Certificates?
+                Ready to Secure Your Documents?
               </h2>
               <p className="text-gray-300 text-lg max-w-2xl mx-auto mb-10">
-                Join thousands of institutions already using DocVerify to issue 
-                tamper-proof, instantly verifiable certificates.
+                Get started with DocVerify to issue 
+                tamper-proof, instantly verifiable documents.
               </p>
               <div className="flex flex-col sm:flex-row gap-4 justify-center">
                 <Link to="/register" className="btn-primary text-lg px-8 py-4">

@@ -4,7 +4,9 @@ import { motion } from 'framer-motion';
 import { HiMail, HiLockClosed, HiEye, HiEyeOff } from 'react-icons/hi';
 import { FcGoogle } from 'react-icons/fc';
 import { FaGithub } from 'react-icons/fa';
+import toast from 'react-hot-toast';
 import Logo from '../../components/Logo';
+import api from '../../services/api';
 
 const Login = () => {
   const navigate = useNavigate();
@@ -15,6 +17,7 @@ const Login = () => {
     remember: false,
   });
   const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState('');
 
   const handleChange = (e) => {
     const { name, value, type, checked } = e.target;
@@ -22,24 +25,39 @@ const Login = () => {
       ...prev,
       [name]: type === 'checkbox' ? checked : value,
     }));
+    setError('');
   };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    setError('');
     setIsLoading(true);
     
-    // Simulate login
-    setTimeout(() => {
-      setIsLoading(false);
-      // Navigate based on role (for demo)
-      if (formData.email.includes('admin')) {
-        navigate('/admin');
-      } else if (formData.email.includes('verifier')) {
-        navigate('/verifier');
+    try {
+      const result = await api.login(formData.email, formData.password);
+
+      if (result.success) {
+        toast.success('Welcome back!');
+        const user = result.data.user;
+        
+        // Navigate based on role
+        if (user.role === 'admin') {
+          navigate('/admin');
+        } else if (user.role === 'verifier') {
+          navigate('/verifier');
+        } else {
+          navigate('/dashboard');
+        }
       } else {
-        navigate('/dashboard');
+        setError(result.message || 'Login failed');
+        toast.error(result.message || 'Login failed');
       }
-    }, 1500);
+    } catch (err) {
+      setError('An error occurred. Please try again.');
+      toast.error('An error occurred. Please try again.');
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   return (
@@ -59,16 +77,31 @@ const Login = () => {
           <h1 className="text-3xl font-bold text-white mb-2">Welcome back</h1>
           <p className="text-gray-400 mb-8">Sign in to your account to continue</p>
 
+          {/* Error Message */}
+          {error && (
+            <div className="mb-6 p-4 bg-red-500/10 border border-red-500/20 rounded-xl text-red-400 text-sm">
+              {error}
+            </div>
+          )}
+
           {/* Social Login */}
           <div className="grid grid-cols-2 gap-4 mb-8">
-            <button className="flex items-center justify-center gap-3 py-3 px-4 bg-white/5 
-              border border-white/10 rounded-xl text-white hover:bg-white/10 transition-all">
+            <a 
+              href="http://localhost:5000/api/auth/google"
+              className="flex items-center justify-center gap-3 py-3 px-4 bg-white/5 
+                border border-white/10 rounded-xl text-white hover:bg-white/10 transition-all"
+            >
               <FcGoogle size={20} />
               <span className="text-sm font-medium">Google</span>
-            </button>
-            <button className="flex items-center justify-center gap-3 py-3 px-4 bg-white/5 
-              border border-white/10 rounded-xl text-white hover:bg-white/10 transition-all">
-              <FaGithub size={20} />
+            </a>
+            <button 
+              type="button"
+              disabled
+              className="flex items-center justify-center gap-3 py-3 px-4 bg-white/5 
+                border border-white/10 rounded-xl text-gray-500 cursor-not-allowed opacity-50"
+              title="Coming soon"
+            >
+              <FaGithub size={20} className="opacity-50" />
               <span className="text-sm font-medium">GitHub</span>
             </button>
           </div>

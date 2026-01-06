@@ -113,8 +113,8 @@ Bob Wilson,bob@example.com,course,Machine Learning Specialization,2024-01-10,95%
   return (
     <div className="max-w-5xl mx-auto">
       <div className="mb-8">
-        <h1 className="text-2xl font-bold text-white mb-2">Bulk Certificate Issuance</h1>
-        <p className="text-gray-400">Issue up to 500 certificates at once via CSV upload with Merkle batch anchoring</p>
+        <h1 className="text-2xl font-bold text-white mb-2">Bulk Document Issuance</h1>
+        <p className="text-gray-400">Issue up to 500 documents at once via CSV upload with Merkle batch anchoring</p>
       </div>
 
       <AnimatePresence mode="wait">

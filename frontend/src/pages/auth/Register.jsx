@@ -1,10 +1,12 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { HiMail, HiLockClosed, HiEye, HiEyeOff, HiUser, HiOfficeBuilding } from 'react-icons/hi';
+import { HiMail, HiLockClosed, HiEye, HiEyeOff, HiUser, HiOfficeBuilding, HiShieldCheck } from 'react-icons/hi';
 import { FcGoogle } from 'react-icons/fc';
 import { FaGithub } from 'react-icons/fa';
+import toast from 'react-hot-toast';
 import Logo from '../../components/Logo';
+import api from '../../services/api';
 
 const Register = () => {
   const navigate = useNavigate();
@@ -19,6 +21,22 @@ const Register = () => {
     agreeTerms: false,
   });
   const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState('');
+  
+  // OTP states
+  const [step, setStep] = useState(1); // 1: form, 2: OTP verification
+  const [otp, setOtp] = useState(['', '', '', '', '', '']);
+  const [otpSending, setOtpSending] = useState(false);
+  const [otpVerified, setOtpVerified] = useState(false);
+  const [countdown, setCountdown] = useState(0);
+
+  // Countdown timer for resend
+  useEffect(() => {
+    if (countdown > 0) {
+      const timer = setTimeout(() => setCountdown(countdown - 1), 1000);
+      return () => clearTimeout(timer);
+    }
+  }, [countdown]);
 
   const handleChange = (e) => {
     const { name, value, type, checked } = e.target;
@@ -26,23 +44,158 @@ const Register = () => {
       ...prev,
       [name]: type === 'checkbox' ? checked : value,
     }));
+    setError('');
+  };
+
+  // Handle OTP input
+  const handleOtpChange = (index, value) => {
+    if (value.length > 1) return;
+    if (!/^\d*$/.test(value)) return;
+
+    const newOtp = [...otp];
+    newOtp[index] = value;
+    setOtp(newOtp);
+
+    // Auto-focus next input
+    if (value && index < 5) {
+      document.getElementById(`otp-${index + 1}`)?.focus();
+    }
+  };
+
+  // Handle OTP paste
+  const handleOtpPaste = (e) => {
+    e.preventDefault();
+    const pastedData = e.clipboardData.getData('text').slice(0, 6);
+    if (!/^\d+$/.test(pastedData)) return;
+    
+    const newOtp = pastedData.split('').concat(Array(6).fill('')).slice(0, 6);
+    setOtp(newOtp);
+  };
+
+  // Handle OTP backspace
+  const handleOtpKeyDown = (index, e) => {
+    if (e.key === 'Backspace' && !otp[index] && index > 0) {
+      document.getElementById(`otp-${index - 1}`)?.focus();
+    }
+  };
+
+  // Send OTP
+  const sendOTP = async () => {
+    if (!formData.email) {
+      setError('Please enter your email address first');
+      return;
+    }
+
+    setOtpSending(true);
+    setError('');
+
+    try {
+      console.log('Sending OTP to:', formData.email);
+      const result = await api.sendOTP(formData.email, 'registration');
+      console.log('OTP API Response:', result);
+      
+      if (result.success) {
+        toast.success('OTP sent to your email!');
+        setStep(2);
+        setCountdown(60); // 60 second countdown for resend
+      } else {
+        setError(result.message || 'Failed to send OTP');
+        toast.error(result.message || 'Failed to send OTP');
+      }
+    } catch (err) {
+      console.error('OTP Send Error:', err);
+      setError('Failed to send OTP. Please try again.');
+      toast.error('Failed to send OTP');
+    } finally {
+      setOtpSending(false);
+    }
+  };
+
+  // Verify OTP
+  const verifyOTP = async () => {
+    const otpString = otp.join('');
+    if (otpString.length !== 6) {
+      setError('Please enter the complete 6-digit OTP');
+      return;
+    }
+
+    setIsLoading(true);
+    setError('');
+
+    try {
+      const result = await api.verifyOTP(formData.email, otpString, 'registration');
+      if (result.success) {
+        toast.success('Email verified!');
+        setOtpVerified(true);
+        // Now complete registration
+        await completeRegistration(otpString);
+      } else {
+        setError(result.message || 'Invalid OTP');
+        toast.error(result.message || 'Invalid OTP');
+      }
+    } catch (err) {
+      setError('Failed to verify OTP');
+      toast.error('Failed to verify OTP');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // Complete registration after OTP verification
+  const completeRegistration = async (verifiedOtp) => {
+    try {
+      const result = await api.register({
+        name: formData.name,
+        email: formData.email,
+        password: formData.password,
+        role: formData.role,
+        organization: formData.organization,
+        otp: verifiedOtp,
+      });
+
+      if (result.success) {
+        toast.success('Registration successful!');
+        navigate('/login');
+      } else {
+        setError(result.message || 'Registration failed');
+        toast.error(result.message || 'Registration failed');
+      }
+    } catch (err) {
+      setError('Registration failed. Please try again.');
+      toast.error('Registration failed');
+    }
   };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    setIsLoading(true);
-    
-    // Simulate registration
-    setTimeout(() => {
-      setIsLoading(false);
-      navigate('/login');
-    }, 1500);
+    setError('');
+
+    // Validate passwords match
+    if (formData.password !== formData.confirmPassword) {
+      setError('Passwords do not match');
+      return;
+    }
+
+    // Validate password strength
+    if (formData.password.length < 8) {
+      setError('Password must be at least 8 characters long');
+      return;
+    }
+
+    // Validate terms agreement
+    if (!formData.agreeTerms) {
+      setError('Please agree to the Terms of Service and Privacy Policy');
+      return;
+    }
+
+    // Send OTP for verification
+    await sendOTP();
   };
 
   return (
     <div className="min-h-screen bg-dark-300 flex">
-      {/* Left Side - Visual */}
-      <div className="hidden lg:flex flex-1 relative overflow-hidden">
+      {/* Left Side - Visual (Fixed) */}
+      <div className="hidden lg:flex flex-1 relative overflow-hidden sticky top-0 h-screen">
         <div className="absolute inset-0 bg-gradient-to-br from-primary-600/20 to-accent-600/20"></div>
         <div className="absolute inset-0 bg-[linear-gradient(rgba(99,102,241,0.05)_1px,transparent_1px),linear-gradient(90deg,rgba(99,102,241,0.05)_1px,transparent_1px)] bg-[size:50px_50px]"></div>
         
@@ -50,16 +203,16 @@ const Register = () => {
           <div className="max-w-lg">
             <h2 className="text-4xl font-bold text-white font-display mb-6">
               Start Securing Your
-              <span className="gradient-text"> Certificates Today</span>
+              <span className="gradient-text"> Documents Today</span>
             </h2>
             <p className="text-gray-400 mb-8">
-              Join thousands of institutions using DocVerify to issue tamper-proof, 
-              blockchain-verified certificates with AI forgery detection.
+              Use DocVerify to issue tamper-proof, 
+              blockchain-verified documents with AI forgery detection.
             </p>
 
             <div className="grid grid-cols-2 gap-4">
               {[
-                { value: '10M+', label: 'Certificates' },
+                { value: '10M+', label: 'Documents' },
                 { value: '5000+', label: 'Institutions' },
                 { value: '99.9%', label: 'Accuracy' },
                 { value: '<2s', label: 'Verification' },
@@ -90,67 +243,84 @@ const Register = () => {
             <span className="text-xl font-bold text-white font-display">DocVerify</span>
           </Link>
 
-          <h1 className="text-3xl font-bold text-white mb-2">Create an account</h1>
-          <p className="text-gray-400 mb-8">Get started with your free account</p>
+          {step === 1 ? (
+            <>
+              <h1 className="text-3xl font-bold text-white mb-2">Create an account</h1>
+              <p className="text-gray-400 mb-8">Get started with your free account</p>
 
-          {/* Social Login */}
-          <div className="grid grid-cols-2 gap-4 mb-8">
-            <button className="flex items-center justify-center gap-3 py-3 px-4 bg-white/5 
-              border border-white/10 rounded-xl text-white hover:bg-white/10 transition-all">
-              <FcGoogle size={20} />
-              <span className="text-sm font-medium">Google</span>
-            </button>
-            <button className="flex items-center justify-center gap-3 py-3 px-4 bg-white/5 
-              border border-white/10 rounded-xl text-white hover:bg-white/10 transition-all">
-              <FaGithub size={20} />
-              <span className="text-sm font-medium">GitHub</span>
-            </button>
-          </div>
+              {/* Error Message */}
+              {error && (
+                <div className="mb-6 p-4 bg-red-500/10 border border-red-500/20 rounded-xl text-red-400 text-sm">
+                  {error}
+                </div>
+              )}
 
-          <div className="flex items-center gap-4 mb-8">
-            <div className="flex-1 h-px bg-white/10"></div>
-            <span className="text-gray-500 text-sm">or continue with email</span>
-            <div className="flex-1 h-px bg-white/10"></div>
-          </div>
-
-          <form onSubmit={handleSubmit} className="space-y-5">
-            <div>
-              <label className="block text-sm font-medium text-gray-300 mb-2">
-                Full Name
-              </label>
-              <div className="relative">
-                <HiUser className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 w-5 h-5" />
-                <input
-                  type="text"
-                  name="name"
-                  value={formData.name}
-                  onChange={handleChange}
-                  placeholder="Enter your full name"
-                  className="input-field-dark pl-12"
-                  required
-                />
+              {/* Social Login */}
+              <div className="grid grid-cols-2 gap-4 mb-8">
+                <a 
+                  href="http://localhost:5000/api/auth/google"
+                  className="flex items-center justify-center gap-3 py-3 px-4 bg-white/5 
+                    border border-white/10 rounded-xl text-white hover:bg-white/10 transition-all"
+                >
+                  <FcGoogle size={20} />
+                  <span className="text-sm font-medium">Google</span>
+                </a>
+                <button 
+                  type="button"
+                  disabled
+                  className="flex items-center justify-center gap-3 py-3 px-4 bg-white/5 
+                    border border-white/10 rounded-xl text-gray-500 cursor-not-allowed opacity-50"
+                  title="Coming soon"
+                >
+                  <FaGithub size={20} className="opacity-50" />
+                  <span className="text-sm font-medium">GitHub</span>
+                </button>
               </div>
-            </div>
 
-            <div>
-              <label className="block text-sm font-medium text-gray-300 mb-2">
-                Email Address
-              </label>
-              <div className="relative">
-                <HiMail className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 w-5 h-5" />
-                <input
-                  type="email"
-                  name="email"
-                  value={formData.email}
-                  onChange={handleChange}
-                  placeholder="Enter your email"
-                  className="input-field-dark pl-12"
-                  required
-                />
+              <div className="flex items-center gap-4 mb-8">
+                <div className="flex-1 h-px bg-white/10"></div>
+                <span className="text-gray-500 text-sm">or continue with email</span>
+                <div className="flex-1 h-px bg-white/10"></div>
               </div>
-            </div>
 
-            <div>
+              <form onSubmit={handleSubmit} className="space-y-5">
+                <div>
+                  <label className="block text-sm font-medium text-gray-300 mb-2">
+                    Full Name
+                  </label>
+                  <div className="relative">
+                    <HiUser className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 w-5 h-5" />
+                    <input
+                      type="text"
+                      name="name"
+                      value={formData.name}
+                      onChange={handleChange}
+                      placeholder="Enter your full name"
+                      className="input-field-dark pl-12"
+                      required
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-300 mb-2">
+                    Email Address
+                  </label>
+                  <div className="relative">
+                    <HiMail className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 w-5 h-5" />
+                    <input
+                      type="email"
+                      name="email"
+                      value={formData.email}
+                      onChange={handleChange}
+                      placeholder="Enter your email"
+                      className="input-field-dark pl-12"
+                      required
+                    />
+                  </div>
+                </div>
+
+                <div>
               <label className="block text-sm font-medium text-gray-300 mb-2">
                 Account Type
               </label>
@@ -261,16 +431,16 @@ const Register = () => {
 
             <button
               type="submit"
-              disabled={isLoading}
+              disabled={isLoading || otpSending}
               className="w-full btn-primary flex items-center justify-center gap-2"
             >
-              {isLoading ? (
+              {otpSending ? (
                 <>
                   <div className="w-5 h-5 border-2 border-white/20 border-t-white rounded-full animate-spin"></div>
-                  Creating account...
+                  Sending OTP...
                 </>
               ) : (
-                'Create Account'
+                'Continue with Email Verification'
               )}
             </button>
           </form>
@@ -281,6 +451,90 @@ const Register = () => {
               Sign in
             </Link>
           </p>
+            </>
+          ) : (
+            /* Step 2: OTP Verification */
+            <>
+              <div className="text-center mb-8">
+                <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-primary-600/20 flex items-center justify-center">
+                  <HiShieldCheck className="w-8 h-8 text-primary-400" />
+                </div>
+                <h1 className="text-3xl font-bold text-white mb-2">Verify Your Email</h1>
+                <p className="text-gray-400">
+                  We've sent a 6-digit code to<br />
+                  <span className="text-white font-medium">{formData.email}</span>
+                </p>
+              </div>
+
+              {/* Error Message */}
+              {error && (
+                <div className="mb-6 p-4 bg-red-500/10 border border-red-500/20 rounded-xl text-red-400 text-sm text-center">
+                  {error}
+                </div>
+              )}
+
+              {/* OTP Input */}
+              <div className="flex justify-center gap-3 mb-8">
+                {otp.map((digit, index) => (
+                  <input
+                    key={index}
+                    id={`otp-${index}`}
+                    type="text"
+                    inputMode="numeric"
+                    maxLength={1}
+                    value={digit}
+                    onChange={(e) => handleOtpChange(index, e.target.value)}
+                    onKeyDown={(e) => handleOtpKeyDown(index, e)}
+                    onPaste={handleOtpPaste}
+                    className="w-12 h-14 text-center text-2xl font-bold bg-dark-100/50 border border-white/20 
+                      rounded-xl text-white focus:border-primary-500 focus:ring-2 focus:ring-primary-500/20 
+                      transition-all outline-none"
+                  />
+                ))}
+              </div>
+
+              {/* Verify Button */}
+              <button
+                onClick={verifyOTP}
+                disabled={isLoading || otp.join('').length !== 6}
+                className="w-full btn-primary flex items-center justify-center gap-2 mb-4"
+              >
+                {isLoading ? (
+                  <>
+                    <div className="w-5 h-5 border-2 border-white/20 border-t-white rounded-full animate-spin"></div>
+                    Verifying...
+                  </>
+                ) : (
+                  'Verify & Create Account'
+                )}
+              </button>
+
+              {/* Resend OTP */}
+              <div className="text-center">
+                {countdown > 0 ? (
+                  <p className="text-gray-500 text-sm">
+                    Resend code in <span className="text-primary-400">{countdown}s</span>
+                  </p>
+                ) : (
+                  <button
+                    onClick={sendOTP}
+                    disabled={otpSending}
+                    className="text-primary-400 hover:text-primary-300 text-sm font-medium"
+                  >
+                    {otpSending ? 'Sending...' : 'Resend OTP'}
+                  </button>
+                )}
+              </div>
+
+              {/* Back Button */}
+              <button
+                onClick={() => { setStep(1); setOtp(['', '', '', '', '', '']); setError(''); }}
+                className="w-full mt-6 text-gray-400 hover:text-white text-sm"
+              >
+                ← Back to registration form
+              </button>
+            </>
+          )}
         </motion.div>
       </div>
     </div>

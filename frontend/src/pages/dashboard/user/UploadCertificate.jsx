@@ -98,8 +98,8 @@ const UploadCertificate = () => {
   return (
     <div className="max-w-4xl mx-auto">
       <div className="mb-8">
-        <h1 className="text-2xl font-bold text-white mb-2">Issue Certificate</h1>
-        <p className="text-gray-400">Upload a document to generate a verifiable certificate with unique ID and QR code</p>
+        <h1 className="text-2xl font-bold text-white mb-2">Upload Document</h1>
+        <p className="text-gray-400">Upload a document to generate a verifiable record with unique ID and QR code</p>
       </div>
 
       <AnimatePresence mode="wait">

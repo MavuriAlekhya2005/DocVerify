@@ -13,19 +13,27 @@ import {
 } from 'react-icons/hi';
 import Logo from '../../components/Logo';
 import PortalSwitcher from '../../components/PortalSwitcher';
+import api from '../../services/api';
 
 const UserDashboard = () => {
   const navigate = useNavigate();
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const user = api.getCurrentUser();
+
+  const getInitials = (name) => {
+    if (!name) return 'U';
+    return name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2);
+  };
 
   const menuItems = [
     { name: 'Dashboard', icon: HiHome, path: '/dashboard' },
-    { name: 'Upload Certificate', icon: HiUpload, path: '/dashboard/upload' },
-    { name: 'My Certificates', icon: HiDocumentText, path: '/dashboard/certificates' },
+    { name: 'Upload Document', icon: HiUpload, path: '/dashboard/upload' },
+    { name: 'My Documents', icon: HiDocumentText, path: '/dashboard/certificates' },
     { name: 'Settings', icon: HiCog, path: '/dashboard/settings' },
   ];
 
   const handleLogout = () => {
+    api.logout();
     navigate('/login');
   };
 
@@ -135,7 +143,7 @@ const UserDashboard = () => {
                 <HiSearch className="w-5 h-5 text-gray-400" />
                 <input
                   type="text"
-                  placeholder="Search certificates..."
+                  placeholder="Search documents..."
                   className="bg-transparent border-none outline-none text-white placeholder-gray-400 w-full"
                 />
               </div>
@@ -144,17 +152,16 @@ const UserDashboard = () => {
             <div className="flex items-center gap-4">
               <button className="relative text-gray-400 hover:text-white p-2 rounded-xl hover:bg-white/5">
                 <HiBell className="w-6 h-6" />
-                <span className="absolute top-1 right-1 w-2 h-2 bg-primary-500 rounded-full"></span>
               </button>
               
               <div className="flex items-center gap-3">
                 <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-primary-600 to-accent-600 
                   flex items-center justify-center text-white font-bold">
-                  JD
+                  {getInitials(user?.name)}
                 </div>
                 <div className="hidden sm:block">
-                  <div className="text-white font-medium text-sm">John Doe</div>
-                  <div className="text-gray-400 text-xs">john@example.com</div>
+                  <div className="text-white font-medium text-sm">{user?.name || 'User'}</div>
+                  <div className="text-gray-400 text-xs capitalize">{user?.role || 'user'}</div>
                 </div>
               </div>
             </div>
