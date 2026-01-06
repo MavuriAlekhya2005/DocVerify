@@ -21,12 +21,18 @@ import AdminDashboard from './pages/dashboard/AdminDashboard';
 import UploadCertificate from './pages/dashboard/user/UploadCertificate';
 import MyCertificates from './pages/dashboard/user/MyCertificates';
 import CertificateDetails from './pages/dashboard/user/CertificateDetails';
+import IssueDocument from './pages/dashboard/user/IssueDocument';
+import BulkIssueDocument from './pages/dashboard/user/BulkIssueDocument';
 
 // Admin Dashboard Sub-pages
 import BulkIssuance from './pages/dashboard/admin/BulkIssuance';
 import ManageCertificates from './pages/dashboard/admin/ManageCertificates';
 import Analytics from './pages/dashboard/admin/Analytics';
 import IssueCertificate from './pages/dashboard/admin/IssueCertificate';
+import Users from './pages/dashboard/admin/Users';
+
+// Settings page
+import Settings from './pages/dashboard/Settings';
 
 // Verifier Dashboard Sub-pages
 import ScanVerify from './pages/dashboard/verifier/ScanVerify';
@@ -78,9 +84,12 @@ function App() {
           </ProtectedRoute>
         }>
           <Route index element={<MyCertificates />} />
+          <Route path="issue" element={<IssueDocument />} />
+          <Route path="bulk-issue" element={<BulkIssueDocument />} />
           <Route path="upload" element={<UploadCertificate />} />
           <Route path="certificates" element={<MyCertificates />} />
           <Route path="certificates/:id" element={<CertificateDetails />} />
+          <Route path="settings" element={<Settings userRole="user" />} />
         </Route>
         
         {/* Protected Admin Dashboard Routes */}
@@ -94,6 +103,8 @@ function App() {
           <Route path="issue" element={<IssueCertificate />} />
           <Route path="bulk-issue" element={<BulkIssuance />} />
           <Route path="manage" element={<ManageCertificates />} />
+          <Route path="users" element={<Users />} />
+          <Route path="settings" element={<Settings userRole="admin" />} />
         </Route>
         
         {/* Protected Verifier Dashboard Routes */}
@@ -105,6 +116,7 @@ function App() {
           <Route index element={<ScanVerify />} />
           <Route path="scan" element={<ScanVerify />} />
           <Route path="history" element={<VerificationHistory />} />
+          <Route path="settings" element={<Settings userRole="verifier" />} />
           <Route path=":id" element={<ScanVerify />} />
         </Route>
       </Routes>

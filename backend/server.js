@@ -14,6 +14,7 @@ const User = require('./models/User');
 const OTP = require('./models/OTP');
 const { extractDocumentData, validateIntegrity } = require('./services/documentExtractor');
 const { generateOTP, sendOTPEmail } = require('./services/emailService');
+const { uploadBase64ToCloudinary, uploadFileToCloudinary, isCloudinaryConfigured, deleteFromCloudinary } = require('./services/cloudinaryService');
 
 const app = express();
 
@@ -615,6 +616,132 @@ app.post('/api/auth/google/token', async (req, res) => {
   }
 });
 
+// ==================== GITHUB OAUTH ROUTES ====================
+
+// GET /api/auth/github - Redirect to GitHub OAuth
+app.get('/api/auth/github', (req, res) => {
+  const clientId = process.env.GITHUB_CLIENT_ID;
+  const redirectUri = process.env.GITHUB_CALLBACK_URL || 'http://localhost:5000/api/auth/github/callback';
+  
+  const githubAuthUrl = `https://github.com/login/oauth/authorize?` +
+    `client_id=${clientId}` +
+    `&redirect_uri=${encodeURIComponent(redirectUri)}` +
+    `&scope=${encodeURIComponent('user:email read:user')}`;
+  
+  res.redirect(githubAuthUrl);
+});
+
+// GET /api/auth/github/callback - Handle GitHub OAuth callback
+app.get('/api/auth/github/callback', async (req, res) => {
+  try {
+    const { code, error } = req.query;
+    
+    if (error) {
+      return res.redirect(`http://localhost:5173/login?error=${encodeURIComponent(error)}`);
+    }
+    
+    if (!code) {
+      return res.redirect('http://localhost:5173/login?error=No authorization code received');
+    }
+    
+    // Exchange code for access token
+    const tokenResponse = await fetch('https://github.com/login/oauth/access_token', {
+      method: 'POST',
+      headers: { 
+        'Content-Type': 'application/json',
+        'Accept': 'application/json'
+      },
+      body: JSON.stringify({
+        code,
+        client_id: process.env.GITHUB_CLIENT_ID,
+        client_secret: process.env.GITHUB_CLIENT_SECRET,
+        redirect_uri: process.env.GITHUB_CALLBACK_URL || 'http://localhost:5000/api/auth/github/callback',
+      }),
+    });
+    
+    const tokens = await tokenResponse.json();
+    
+    if (tokens.error) {
+      console.error('GitHub token error:', tokens);
+      return res.redirect(`http://localhost:5173/login?error=${encodeURIComponent(tokens.error_description || tokens.error)}`);
+    }
+    
+    // Get user info from GitHub
+    const userResponse = await fetch('https://api.github.com/user', {
+      headers: { 
+        Authorization: `Bearer ${tokens.access_token}`,
+        'Accept': 'application/vnd.github.v3+json',
+        'User-Agent': 'DocVerify-App'
+      },
+    });
+    
+    const githubUser = await userResponse.json();
+    
+    // Get user's primary email if not public
+    let email = githubUser.email;
+    if (!email) {
+      const emailsResponse = await fetch('https://api.github.com/user/emails', {
+        headers: { 
+          Authorization: `Bearer ${tokens.access_token}`,
+          'Accept': 'application/vnd.github.v3+json',
+          'User-Agent': 'DocVerify-App'
+        },
+      });
+      const emails = await emailsResponse.json();
+      const primaryEmail = emails.find(e => e.primary && e.verified);
+      email = primaryEmail ? primaryEmail.email : (emails[0] ? emails[0].email : null);
+    }
+    
+    if (!email) {
+      return res.redirect('http://localhost:5173/login?error=Could not get email from GitHub');
+    }
+    
+    // Find or create user
+    let user = await User.findOne({ 
+      $or: [
+        { githubId: githubUser.id.toString() },
+        { email: email.toLowerCase() }
+      ]
+    });
+    
+    if (user) {
+      // Update existing user with GitHub info if not already set
+      if (!user.githubId) {
+        user.githubId = githubUser.id.toString();
+        if (!user.authProvider) user.authProvider = 'github';
+      }
+      if (!user.avatar && githubUser.avatar_url) {
+        user.avatar = githubUser.avatar_url;
+      }
+      user.isVerified = true;
+      user.lastLogin = new Date();
+      await user.save();
+    } else {
+      // Create new user
+      user = await User.create({
+        name: githubUser.name || githubUser.login,
+        email: email.toLowerCase(),
+        githubId: githubUser.id.toString(),
+        avatar: githubUser.avatar_url,
+        authProvider: 'github',
+        isVerified: true,
+        role: 'user',
+      });
+    }
+    
+    // Generate JWT token
+    const token = generateToken(user);
+    
+    // Redirect to frontend with token
+    const frontendUrl = `http://localhost:5173/auth/callback?token=${token}&user=${encodeURIComponent(JSON.stringify(user.toJSON()))}`;
+    res.redirect(frontendUrl);
+    
+  } catch (error) {
+    console.error('GitHub OAuth error:', error);
+    res.redirect(`http://localhost:5173/login?error=${encodeURIComponent('Authentication failed')}`);
+  }
+});
+
 // ==================== DOCUMENT ROUTES ====================
 
 // POST /api/upload - Upload document and generate certificate with AI extraction
@@ -1129,6 +1256,425 @@ app.delete('/api/certificates/:id', authenticateToken, async (req, res) => {
     }
     
     res.json({ success: true, message: 'Certificate deleted successfully' });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+// ==================== USER DOCUMENT ISSUANCE ROUTES ====================
+
+// POST /api/documents/issue - Issue a document (any authenticated user)
+app.post('/api/documents/issue', authenticateToken, async (req, res) => {
+  try {
+    const { documentId, accessKey, documentType, templateId, formData, codeType } = req.body;
+    
+    // Validate required fields
+    if (!documentId || !accessKey || !documentType || !templateId || !formData) {
+      return res.status(400).json({ 
+        success: false, 
+        message: 'Document ID, access key, type, template, and form data are required' 
+      });
+    }
+    
+    // Generate document hash from form data
+    const documentHash = crypto.createHash('sha256')
+      .update(JSON.stringify(formData))
+      .digest('hex');
+    
+    // Generate QR code
+    const qrData = JSON.stringify({ 
+      documentId, 
+      type: documentType,
+      url: `${process.env.FRONTEND_URL || 'http://localhost:5173'}/verify/${documentId}`
+    });
+    const qrCode = await QRCode.toDataURL(qrData, { width: 300, margin: 2 });
+    
+    // Determine document title based on type
+    let title = 'Untitled Document';
+    if (documentType === 'student_id') {
+      title = `Student ID - ${formData.studentName || 'Unknown'}`;
+    } else if (documentType === 'bill') {
+      title = `Invoice ${formData.billNumber || documentId}`;
+    } else if (documentType === 'certificate') {
+      title = formData.certificateTitle || 'Certificate';
+    }
+    
+    // Create the certificate/document record
+    const certificate = await Certificate.create({
+      certificateId: documentId,
+      title,
+      documentHash,
+      accessKey,
+      qrCode,
+      originalFilename: `${documentId}.pdf`,
+      fileType: 'application/pdf',
+      extractionStatus: 'completed',
+      issuedBy: req.user.id,
+      primaryDetails: {
+        documentType,
+        templateId,
+        fields: formData,
+        hash: documentHash,
+        extractedAt: new Date(),
+        confidenceScore: 100,
+      },
+      fullDetails: {
+        rawText: JSON.stringify(formData),
+        structuredData: new Map(Object.entries(formData)),
+        dates: [],
+        signatures: [],
+        lineCount: 1,
+        wordCount: Object.keys(formData).length,
+        hash: documentHash,
+        extractionMetadata: { 
+          textLength: JSON.stringify(formData).length, 
+          pages: 1, 
+          ocrConfidence: 100,
+          templateId,
+          codeType: codeType || 'qr',
+        },
+      },
+      verificationSummary: {
+        documentType,
+        holderName: formData.studentName || formData.recipientName || formData.customerName || 'Not specified',
+        documentNumber: documentId,
+        issueDate: new Date().toISOString().split('T')[0],
+        issuingAuthority: req.user.email,
+        confidenceScore: 100,
+        integrityHash: documentHash,
+      },
+    });
+    
+    res.status(201).json({
+      success: true,
+      message: 'Document issued successfully',
+      data: {
+        documentId: certificate.certificateId,
+        accessKey: certificate.accessKey,
+        documentHash: certificate.documentHash,
+        qrCode: certificate.qrCode,
+        title: certificate.title,
+        verifyUrl: `${process.env.FRONTEND_URL || 'http://localhost:5173'}/verify/${documentId}`,
+        createdAt: certificate.createdAt,
+      }
+    });
+  } catch (error) {
+    console.error('Issue document error:', error);
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+// POST /api/documents/bulk-issue - Bulk issue documents (any authenticated user)
+app.post('/api/documents/bulk-issue', authenticateToken, async (req, res) => {
+  try {
+    const { documents } = req.body;
+    
+    if (!documents || !Array.isArray(documents) || documents.length === 0) {
+      return res.status(400).json({ 
+        success: false, 
+        message: 'Documents array is required' 
+      });
+    }
+    
+    // Limit bulk issuance to 100 documents at a time
+    if (documents.length > 100) {
+      return res.status(400).json({ 
+        success: false, 
+        message: 'Maximum 100 documents can be issued at once' 
+      });
+    }
+    
+    const results = [];
+    const errors = [];
+    
+    for (const doc of documents) {
+      try {
+        const { documentId, accessKey, documentType, templateId, formData, codeType } = doc;
+        
+        // Generate document hash
+        const documentHash = crypto.createHash('sha256')
+          .update(JSON.stringify(formData))
+          .digest('hex');
+        
+        // Generate QR code
+        const qrData = JSON.stringify({ 
+          documentId, 
+          type: documentType,
+          url: `${process.env.FRONTEND_URL || 'http://localhost:5173'}/verify/${documentId}`
+        });
+        const qrCode = await QRCode.toDataURL(qrData, { width: 300, margin: 2 });
+        
+        // Determine title
+        let title = 'Untitled Document';
+        if (documentType === 'student_id') {
+          title = `Student ID - ${formData.studentName || 'Unknown'}`;
+        } else if (documentType === 'bill') {
+          title = `Invoice ${formData.billNumber || documentId}`;
+        } else if (documentType === 'certificate') {
+          title = formData.certificateTitle || 'Certificate';
+        }
+        
+        // Create certificate
+        const certificate = await Certificate.create({
+          certificateId: documentId,
+          title,
+          documentHash,
+          accessKey,
+          qrCode,
+          originalFilename: `${documentId}.pdf`,
+          fileType: 'application/pdf',
+          extractionStatus: 'completed',
+          issuedBy: req.user.id,
+          primaryDetails: {
+            documentType,
+            templateId,
+            fields: formData,
+            hash: documentHash,
+            extractedAt: new Date(),
+            confidenceScore: 100,
+          },
+          fullDetails: {
+            rawText: JSON.stringify(formData),
+            structuredData: new Map(Object.entries(formData)),
+            dates: [],
+            signatures: [],
+            lineCount: 1,
+            wordCount: Object.keys(formData).length,
+            hash: documentHash,
+            extractionMetadata: { 
+              textLength: JSON.stringify(formData).length, 
+              pages: 1, 
+              ocrConfidence: 100,
+              templateId,
+              codeType: codeType || 'qr',
+            },
+          },
+          verificationSummary: {
+            documentType,
+            holderName: formData.studentName || formData.recipientName || formData.customerName || 'Not specified',
+            documentNumber: documentId,
+            issueDate: new Date().toISOString().split('T')[0],
+            issuingAuthority: req.user.email,
+            confidenceScore: 100,
+            integrityHash: documentHash,
+          },
+        });
+        
+        results.push({
+          documentId: certificate.certificateId,
+          accessKey: certificate.accessKey,
+          title: certificate.title,
+          success: true,
+        });
+      } catch (err) {
+        errors.push({
+          documentId: doc.documentId,
+          error: err.message,
+          success: false,
+        });
+      }
+    }
+    
+    res.status(201).json({
+      success: true,
+      message: `Issued ${results.length} documents with ${errors.length} errors`,
+      data: {
+        issued: results.length,
+        failed: errors.length,
+        results,
+        errors,
+      }
+    });
+  } catch (error) {
+    console.error('Bulk issue error:', error);
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+// GET /api/documents/issued - Get documents issued by current user
+app.get('/api/documents/issued', authenticateToken, async (req, res) => {
+  try {
+    const certificates = await Certificate.find({ issuedBy: req.user.id })
+      .select('-qrCode -filePath -fullDetails')
+      .sort({ createdAt: -1 });
+    
+    res.json({ success: true, data: certificates });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+// ==================== ADMIN USER MANAGEMENT ROUTES ====================
+
+// GET /api/admin/users - Get all users (admin only)
+app.get('/api/admin/users', authenticateToken, async (req, res) => {
+  try {
+    if (req.user.role !== 'admin') {
+      return res.status(403).json({ success: false, message: 'Admin access required' });
+    }
+    
+    const users = await User.find().select('-password').sort({ createdAt: -1 });
+    res.json({ success: true, users });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+// PUT /api/admin/users/:id/role - Update user role
+app.put('/api/admin/users/:id/role', authenticateToken, async (req, res) => {
+  try {
+    if (req.user.role !== 'admin') {
+      return res.status(403).json({ success: false, message: 'Admin access required' });
+    }
+    
+    const { role } = req.body;
+    if (!['user', 'verifier', 'admin', 'institution'].includes(role)) {
+      return res.status(400).json({ success: false, message: 'Invalid role' });
+    }
+    
+    const user = await User.findByIdAndUpdate(
+      req.params.id,
+      { role },
+      { new: true }
+    ).select('-password');
+    
+    if (!user) {
+      return res.status(404).json({ success: false, message: 'User not found' });
+    }
+    
+    res.json({ success: true, user });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+// PUT /api/admin/users/:id/status - Update user status
+app.put('/api/admin/users/:id/status', authenticateToken, async (req, res) => {
+  try {
+    if (req.user.role !== 'admin') {
+      return res.status(403).json({ success: false, message: 'Admin access required' });
+    }
+    
+    const { status } = req.body;
+    if (!['active', 'suspended'].includes(status)) {
+      return res.status(400).json({ success: false, message: 'Invalid status' });
+    }
+    
+    const user = await User.findByIdAndUpdate(
+      req.params.id,
+      { status },
+      { new: true }
+    ).select('-password');
+    
+    if (!user) {
+      return res.status(404).json({ success: false, message: 'User not found' });
+    }
+    
+    res.json({ success: true, user });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+// DELETE /api/admin/users/:id - Delete user
+app.delete('/api/admin/users/:id', authenticateToken, async (req, res) => {
+  try {
+    if (req.user.role !== 'admin') {
+      return res.status(403).json({ success: false, message: 'Admin access required' });
+    }
+    
+    const user = await User.findByIdAndDelete(req.params.id);
+    
+    if (!user) {
+      return res.status(404).json({ success: false, message: 'User not found' });
+    }
+    
+    res.json({ success: true, message: 'User deleted' });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+// ==================== PROFILE ROUTES ====================
+
+// PUT /api/auth/profile - Update user profile
+app.put('/api/auth/profile', authenticateToken, async (req, res) => {
+  try {
+    const { name, phone, organization, avatar } = req.body;
+    
+    const updateData = {};
+    if (name) updateData.name = name;
+    if (phone) updateData.phone = phone;
+    if (organization) updateData.organization = organization;
+    if (avatar) updateData.avatar = avatar;
+    
+    const user = await User.findByIdAndUpdate(
+      req.user.id,
+      updateData,
+      { new: true }
+    ).select('-password');
+    
+    res.json({ success: true, user });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+// POST /api/auth/change-password - Change password
+app.post('/api/auth/change-password', authenticateToken, async (req, res) => {
+  try {
+    const { currentPassword, newPassword } = req.body;
+    
+    const user = await User.findById(req.user.id);
+    if (!user) {
+      return res.status(404).json({ success: false, message: 'User not found' });
+    }
+    
+    // Check if user has a password (OAuth users might not)
+    if (user.password) {
+      const isMatch = await user.comparePassword(currentPassword);
+      if (!isMatch) {
+        return res.status(400).json({ success: false, message: 'Current password is incorrect' });
+      }
+    }
+    
+    user.password = newPassword;
+    await user.save();
+    
+    res.json({ success: true, message: 'Password changed successfully' });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+// POST /api/auth/disconnect/:provider - Disconnect OAuth provider
+app.post('/api/auth/disconnect/:provider', authenticateToken, async (req, res) => {
+  try {
+    const { provider } = req.params;
+    const user = await User.findById(req.user.id);
+    
+    if (!user) {
+      return res.status(404).json({ success: false, message: 'User not found' });
+    }
+    
+    // Ensure user has a password or another auth method before disconnecting
+    if (!user.password && !user.googleId && !user.githubId) {
+      return res.status(400).json({ 
+        success: false, 
+        message: 'Cannot disconnect the only authentication method. Set a password first.' 
+      });
+    }
+    
+    if (provider === 'google') {
+      user.googleId = undefined;
+      if (user.authProvider === 'google') user.authProvider = 'local';
+    } else if (provider === 'github') {
+      user.githubId = undefined;
+      if (user.authProvider === 'github') user.authProvider = 'local';
+    }
+    
+    await user.save();
+    res.json({ success: true, message: `${provider} disconnected` });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
   }

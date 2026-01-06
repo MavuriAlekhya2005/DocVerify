@@ -36,13 +36,27 @@ const userSchema = new mongoose.Schema({
     type: String,
     sparse: true,
   },
+  // GitHub OAuth fields
+  githubId: {
+    type: String,
+    sparse: true,
+  },
   avatar: {
     type: String,
   },
   authProvider: {
     type: String,
-    enum: ['local', 'google'],
+    enum: ['local', 'google', 'github'],
     default: 'local',
+  },
+  phone: {
+    type: String,
+    trim: true,
+  },
+  status: {
+    type: String,
+    enum: ['active', 'suspended'],
+    default: 'active',
   },
   createdAt: {
     type: Date,

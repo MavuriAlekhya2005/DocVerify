@@ -1,13 +1,20 @@
 import { Link, useLocation } from 'react-router-dom';
 import { HiSwitchHorizontal, HiUser, HiShieldCheck, HiOfficeBuilding } from 'react-icons/hi';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 
 const PortalSwitcher = () => {
   const [isOpen, setIsOpen] = useState(false);
+  const [userRole, setUserRole] = useState('user');
   const location = useLocation();
 
-  const portals = [
+  useEffect(() => {
+    // Get user role from localStorage
+    const user = JSON.parse(localStorage.getItem('user') || '{}');
+    setUserRole(user.role || 'user');
+  }, []);
+
+  const allPortals = [
     { 
       name: 'User Portal', 
       path: '/dashboard', 
@@ -15,7 +22,8 @@ const PortalSwitcher = () => {
       color: 'from-blue-500 to-blue-600',
       bgColor: 'bg-blue-500/20',
       textColor: 'text-blue-400',
-      description: 'View & manage your certificates'
+      description: 'View & manage your certificates',
+      roles: ['user', 'verifier', 'admin'] // Who can see this portal
     },
     { 
       name: 'Verifier Portal', 
@@ -24,7 +32,8 @@ const PortalSwitcher = () => {
       color: 'from-accent-500 to-accent-600',
       bgColor: 'bg-accent-500/20',
       textColor: 'text-accent-400',
-      description: 'Scan & verify documents'
+      description: 'Scan & verify documents',
+      roles: ['verifier', 'admin'] // Only verifiers and admins
     },
     { 
       name: 'Admin Portal', 
@@ -33,18 +42,33 @@ const PortalSwitcher = () => {
       color: 'from-primary-500 to-primary-600',
       bgColor: 'bg-primary-500/20',
       textColor: 'text-primary-400',
-      description: 'Issue & manage all certificates'
+      description: 'Issue & manage all certificates',
+      roles: ['admin'] // Only admins
     },
   ];
 
+  // Filter portals based on user role
+  const portals = allPortals.filter(portal => portal.roles.includes(userRole));
+
   const getCurrentPortal = () => {
-    if (location.pathname.startsWith('/admin')) return portals[2];
-    if (location.pathname.startsWith('/verifier')) return portals[1];
+    if (location.pathname.startsWith('/admin')) {
+      const adminPortal = portals.find(p => p.path === '/admin');
+      return adminPortal || portals[0];
+    }
+    if (location.pathname.startsWith('/verifier')) {
+      const verifierPortal = portals.find(p => p.path === '/verifier');
+      return verifierPortal || portals[0];
+    }
     return portals[0];
   };
 
   const currentPortal = getCurrentPortal();
   const otherPortals = portals.filter(p => p.path !== currentPortal.path);
+
+  // Don't show switcher if user only has access to one portal
+  if (portals.length <= 1) {
+    return null;
+  }
 
   return (
     <div className="relative">

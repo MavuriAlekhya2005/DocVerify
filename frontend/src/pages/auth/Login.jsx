@@ -94,16 +94,14 @@ const Login = () => {
               <FcGoogle size={20} />
               <span className="text-sm font-medium">Google</span>
             </a>
-            <button 
-              type="button"
-              disabled
+            <a 
+              href="http://localhost:5000/api/auth/github"
               className="flex items-center justify-center gap-3 py-3 px-4 bg-white/5 
-                border border-white/10 rounded-xl text-gray-500 cursor-not-allowed opacity-50"
-              title="Coming soon"
+                border border-white/10 rounded-xl text-white hover:bg-white/10 transition-all"
             >
-              <FaGithub size={20} className="opacity-50" />
+              <FaGithub size={20} />
               <span className="text-sm font-medium">GitHub</span>
-            </button>
+            </a>
           </div>
 
           <div className="flex items-center gap-4 mb-8">

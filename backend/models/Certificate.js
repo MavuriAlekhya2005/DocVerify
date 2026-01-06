@@ -3,16 +3,8 @@ const mongoose = require('mongoose');
 // Primary Details Schema - Quick access data (blockchain-ready)
 const primaryDetailsSchema = new mongoose.Schema({
   documentType: { type: String, default: 'general' },
-  fields: {
-    name: String,
-    dateOfBirth: String,
-    documentNumber: String,
-    issueDate: String,
-    expiryDate: String,
-    issuingAuthority: String,
-    qualification: String,
-    grade: String,
-  },
+  templateId: { type: String }, // Template used for issued documents
+  fields: { type: mongoose.Schema.Types.Mixed, default: {} }, // Flexible fields for different document types
   hash: { type: String, required: true }, // Integrity hash
   extractedAt: { type: Date, default: Date.now },
   confidenceScore: { type: Number, default: 0 },
@@ -103,6 +95,13 @@ const certificateSchema = new mongoose.Schema({
   downloadCount: { type: Number, default: 0 },
   lastVerifiedAt: Date,
   lastFullAccessAt: Date,
+  
+  // Document issuer tracking
+  issuedBy: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User',
+    index: true,
+  },
   
   createdAt: {
     type: Date,

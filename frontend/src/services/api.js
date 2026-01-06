@@ -177,10 +177,116 @@ export const api = {
     return response.json();
   },
 
+  // Issue document (any user)
+  issueUserDocument: async (data) => {
+    const response = await fetch(`${API_URL}/documents/issue`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
+      body: JSON.stringify(data),
+    });
+    return response.json();
+  },
+
+  // Bulk issue documents (any user)
+  bulkIssueDocuments: async (documents) => {
+    const response = await fetch(`${API_URL}/documents/bulk-issue`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
+      body: JSON.stringify({ documents }),
+    });
+    return response.json();
+  },
+
+  // Get user's issued documents
+  getIssuedDocuments: async () => {
+    const response = await fetch(`${API_URL}/documents/issued`, {
+      headers: getAuthHeaders(),
+    });
+    return response.json();
+  },
+
   // Delete/revoke a certificate
   deleteCertificate: async (certificateId) => {
     const response = await fetch(`${API_URL}/certificates/${certificateId}`, {
       method: 'DELETE',
+      headers: getAuthHeaders(),
+    });
+    return response.json();
+  },
+
+  // ==================== USERS MANAGEMENT (ADMIN) ====================
+
+  // Get all users
+  getUsers: async () => {
+    const response = await fetch(`${API_URL}/admin/users`, {
+      headers: getAuthHeaders(),
+    });
+    return response.json();
+  },
+
+  // Update user role
+  updateUserRole: async (userId, role) => {
+    const response = await fetch(`${API_URL}/admin/users/${userId}/role`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
+      body: JSON.stringify({ role }),
+    });
+    return response.json();
+  },
+
+  // Update user status
+  updateUserStatus: async (userId, status) => {
+    const response = await fetch(`${API_URL}/admin/users/${userId}/status`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
+      body: JSON.stringify({ status }),
+    });
+    return response.json();
+  },
+
+  // Delete user
+  deleteUser: async (userId) => {
+    const response = await fetch(`${API_URL}/admin/users/${userId}`, {
+      method: 'DELETE',
+      headers: getAuthHeaders(),
+    });
+    return response.json();
+  },
+
+  // ==================== PROFILE SETTINGS ====================
+
+  // Get user profile
+  getProfile: async () => {
+    const response = await fetch(`${API_URL}/auth/me`, {
+      headers: getAuthHeaders(),
+    });
+    return response.json();
+  },
+
+  // Update user profile
+  updateProfile: async (data) => {
+    const response = await fetch(`${API_URL}/auth/profile`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
+      body: JSON.stringify(data),
+    });
+    return response.json();
+  },
+
+  // Change password
+  changePassword: async (data) => {
+    const response = await fetch(`${API_URL}/auth/change-password`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
+      body: JSON.stringify(data),
+    });
+    return response.json();
+  },
+
+  // Disconnect OAuth provider
+  disconnectOAuth: async (provider) => {
+    const response = await fetch(`${API_URL}/auth/disconnect/${provider}`, {
+      method: 'POST',
       headers: getAuthHeaders(),
     });
     return response.json();
