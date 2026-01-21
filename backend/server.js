@@ -16,6 +16,8 @@ const { extractDocumentData, validateIntegrity } = require('./services/documentE
 const { generateOTP, sendOTPEmail } = require('./services/emailService');
 const { uploadBase64ToCloudinary, uploadFileToCloudinary, isCloudinaryConfigured, deleteFromCloudinary } = require('./services/cloudinaryService');
 const blockchainService = require('./services/blockchainService');
+const cacheService = require('./services/cacheService');
+const aiService = require('./services/aiService');
 
 const app = express();
 
@@ -26,6 +28,13 @@ const JWT_SECRET = process.env.JWT_SECRET || 'docverify-secret-key-change-in-pro
 mongoose.connect(process.env.MONGODB_URI)
   .then(() => console.log('MongoDB Connected'))
   .catch(err => console.error('MongoDB Error:', err));
+
+// Initialize Redis cache service
+cacheService.initialize().then(() => {
+  console.log('Cache service initialized');
+}).catch(err => {
+  console.log('Cache service running in memory-only mode');
+});
 
 
 // Create uploads directory
@@ -877,13 +886,21 @@ app.get('/api/certificates/:id', async (req, res) => {
   }
 });
 
-// POST /api/verify - Verify certificate with tiered access
-app.post('/api/verify', async (req, res) => {
+// POST /api/verify - Verify certificate with tiered access (with caching)
+app.post('/api/verify', cacheService.rateLimitMiddleware('verify', 100, 60), async (req, res) => {
   try {
     const { certificateId, accessKey } = req.body;
 
     if (!certificateId) {
       return res.status(400).json({ success: false, message: 'Certificate ID required' });
+    }
+
+    // Check cache for partial verification (no access key)
+    if (!accessKey) {
+      const cached = await cacheService.getCachedVerification(certificateId);
+      if (cached) {
+        return res.json({ ...cached, cached: true });
+      }
     }
 
     const certificate = await Certificate.findOne({ certificateId });
@@ -967,6 +984,12 @@ app.post('/api/verify', async (req, res) => {
     }
 
     await certificate.save();
+    
+    // Cache partial verification result (not full access)
+    if (!accessKey) {
+      await cacheService.cacheVerification(certificateId, response, 300);
+    }
+    
     res.json(response);
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
@@ -1049,8 +1072,464 @@ app.get('/api/verify/quick/:id', async (req, res) => {
 });
 
 // Health check
-app.get('/api/health', (req, res) => {
-  res.json({ success: true, message: 'DocVerify API running' });
+app.get('/api/health', async (req, res) => {
+  const cacheStats = await cacheService.getStats();
+  res.json({ 
+    success: true, 
+    message: 'DocVerify API running',
+    services: {
+      cache: cacheStats.isRedisConnected ? 'redis' : 'memory',
+      ai: aiService.checkAvailability() ? 'openai' : 'fallback',
+      blockchain: blockchainService.isAvailable() ? 'connected' : 'disconnected',
+    }
+  });
+});
+
+// ==================== AI EXTRACTION ROUTES ====================
+
+// POST /api/ai/extract - Extract fields from document text using AI
+app.post('/api/ai/extract', authenticateToken, cacheService.rateLimitMiddleware('ai-extract', 20, 60), async (req, res) => {
+  try {
+    const { text, documentType, filePath: docFilePath } = req.body;
+
+    if (!text && !docFilePath) {
+      return res.status(400).json({ success: false, message: 'Text or file path required' });
+    }
+
+    let textToProcess = text;
+    
+    // If file path provided, read and extract text
+    if (docFilePath && !text) {
+      const fullPath = path.join(uploadsDir, docFilePath);
+      if (fs.existsSync(fullPath)) {
+        const extractedData = await extractDocumentData(fullPath, 'application/pdf');
+        textToProcess = extractedData.fullDetails?.rawText || '';
+      }
+    }
+
+    const result = await aiService.extractFields(textToProcess, documentType);
+    
+    res.json({
+      success: true,
+      data: result,
+    });
+  } catch (error) {
+    console.error('AI extraction error:', error);
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+// POST /api/ai/suggest - Get field suggestions based on partial input
+app.post('/api/ai/suggest', authenticateToken, cacheService.rateLimitMiddleware('ai-suggest', 50, 60), async (req, res) => {
+  try {
+    const { fieldName, partialValue, context } = req.body;
+
+    if (!fieldName || !partialValue) {
+      return res.status(400).json({ success: false, message: 'Field name and partial value required' });
+    }
+
+    const suggestions = await aiService.getFieldSuggestions(fieldName, partialValue, context);
+    
+    res.json({
+      success: true,
+      data: { suggestions },
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+// POST /api/ai/validate - Validate and enhance extracted data
+app.post('/api/ai/validate', authenticateToken, async (req, res) => {
+  try {
+    const { fields, documentType } = req.body;
+
+    if (!fields) {
+      return res.status(400).json({ success: false, message: 'Fields data required' });
+    }
+
+    const result = await aiService.validateAndEnhance(fields, documentType);
+    
+    res.json({
+      success: true,
+      data: result,
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+// GET /api/ai/document-types - Get supported document types and their fields
+app.get('/api/ai/document-types', (req, res) => {
+  const types = aiService.getSupportedDocumentTypes();
+  res.json({
+    success: true,
+    data: types,
+  });
+});
+
+// GET /api/ai/fields/:type - Get recommended fields for a document type
+app.get('/api/ai/fields/:type', (req, res) => {
+  const fields = aiService.getRecommendedFields(req.params.type);
+  res.json({
+    success: true,
+    data: fields,
+  });
+});
+
+// POST /api/ai/summary - Generate document summary
+app.post('/api/ai/summary', authenticateToken, cacheService.rateLimitMiddleware('ai-summary', 10, 60), async (req, res) => {
+  try {
+    const { text, documentType } = req.body;
+
+    if (!text) {
+      return res.status(400).json({ success: false, message: 'Text required' });
+    }
+
+    const summary = await aiService.generateSummary(text, documentType);
+    
+    res.json({
+      success: true,
+      data: { summary },
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+// GET /api/ai/status - Get AI service status
+app.get('/api/ai/status', (req, res) => {
+  res.json({
+    success: true,
+    data: {
+      available: aiService.checkAvailability(),
+      provider: aiService.checkAvailability() ? 'OpenAI' : 'Fallback (Regex)',
+      model: aiService.checkAvailability() ? process.env.OPENAI_MODEL || 'gpt-3.5-turbo' : 'N/A',
+    },
+  });
+});
+
+// ==================== CACHE ROUTES ====================
+
+// GET /api/cache/stats - Get cache statistics (admin only)
+app.get('/api/cache/stats', authenticateToken, async (req, res) => {
+  try {
+    const user = await User.findById(req.user.id);
+    if (user?.role !== 'admin') {
+      return res.status(403).json({ success: false, message: 'Admin access required' });
+    }
+
+    const stats = await cacheService.getStats();
+    res.json({
+      success: true,
+      data: stats,
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+// DELETE /api/cache/invalidate/:type/:id - Invalidate specific cache (admin only)
+app.delete('/api/cache/invalidate/:type/:id', authenticateToken, async (req, res) => {
+  try {
+    const user = await User.findById(req.user.id);
+    if (user?.role !== 'admin') {
+      return res.status(403).json({ success: false, message: 'Admin access required' });
+    }
+
+    const { type, id } = req.params;
+    
+    switch (type) {
+      case 'verification':
+        await cacheService.invalidateVerification(id);
+        break;
+      case 'document':
+        await cacheService.invalidateDocument(id);
+        break;
+      default:
+        return res.status(400).json({ success: false, message: 'Invalid cache type' });
+    }
+
+    res.json({
+      success: true,
+      message: `Cache invalidated for ${type}:${id}`,
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+// ==================== GAS ESTIMATION ROUTES ====================
+
+// GET /api/blockchain/gas/prices - Get current gas prices
+app.get('/api/blockchain/gas/prices', async (req, res) => {
+  try {
+    const prices = await blockchainService.getGasPrices();
+    res.json({
+      success: true,
+      data: prices,
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+// POST /api/blockchain/gas/estimate - Estimate gas for an operation
+app.post('/api/blockchain/gas/estimate', authenticateToken, async (req, res) => {
+  try {
+    const { operation, documentHash, documentId, documentHashes, batchId } = req.body;
+
+    if (!operation) {
+      return res.status(400).json({ success: false, message: 'Operation type required' });
+    }
+
+    const report = await blockchainService.getGasEstimationReport(operation, {
+      documentHash,
+      documentId,
+      documentHashes,
+      batchId,
+    });
+
+    res.json({
+      success: true,
+      data: report,
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+// GET /api/blockchain/wallet - Get wallet balance
+app.get('/api/blockchain/wallet', authenticateToken, async (req, res) => {
+  try {
+    const balance = await blockchainService.getWalletBalance();
+    res.json({
+      success: true,
+      data: balance,
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+// ==================== ENHANCED ANALYTICS ROUTES ====================
+
+// GET /api/analytics/detailed - Get detailed analytics (admin only)
+app.get('/api/analytics/detailed', authenticateToken, async (req, res) => {
+  try {
+    const user = await User.findById(req.user.id);
+    if (user?.role !== 'admin') {
+      return res.status(403).json({ success: false, message: 'Admin access required' });
+    }
+
+    // Check cache first
+    const cached = await cacheService.getCachedAnalytics('detailed');
+    if (cached) {
+      return res.json({ success: true, data: cached, cached: true });
+    }
+
+    // Get basic counts
+    const [totalCertificates, totalUsers] = await Promise.all([
+      Certificate.countDocuments(),
+      User.countDocuments(),
+    ]);
+
+    // Get verification stats
+    const verificationStats = await Certificate.aggregate([
+      {
+        $group: {
+          _id: null,
+          totalVerifications: { $sum: '$verificationCount' },
+          totalFullAccess: { $sum: '$fullAccessCount' },
+          totalDownloads: { $sum: '$downloadCount' },
+          avgConfidence: { $avg: '$primaryDetails.confidenceScore' },
+        }
+      }
+    ]);
+
+    // Get certificates by extraction status
+    const statusCounts = await Certificate.aggregate([
+      { $group: { _id: '$extractionStatus', count: { $sum: 1 } } }
+    ]);
+
+    // Get certificates by document type
+    const typeDistribution = await Certificate.aggregate([
+      { $group: { _id: '$primaryDetails.documentType', count: { $sum: 1 } } }
+    ]);
+
+    // Get user role distribution
+    const roleDistribution = await User.aggregate([
+      { $group: { _id: '$role', count: { $sum: 1 } } }
+    ]);
+
+    // Get hourly activity (last 24 hours)
+    const last24Hours = new Date(Date.now() - 24 * 60 * 60 * 1000);
+    const hourlyActivity = await Certificate.aggregate([
+      { $match: { createdAt: { $gte: last24Hours } } },
+      {
+        $group: {
+          _id: { $hour: '$createdAt' },
+          documents: { $sum: 1 },
+          verifications: { $sum: '$verificationCount' },
+        }
+      },
+      { $sort: { '_id': 1 } }
+    ]);
+
+    // Get daily activity (last 30 days)
+    const last30Days = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+    const dailyActivity = await Certificate.aggregate([
+      { $match: { createdAt: { $gte: last30Days } } },
+      {
+        $group: {
+          _id: { $dateToString: { format: '%Y-%m-%d', date: '$createdAt' } },
+          documents: { $sum: 1 },
+          verifications: { $sum: '$verificationCount' },
+        }
+      },
+      { $sort: { '_id': 1 } }
+    ]);
+
+    // Get monthly trends (last 12 months)
+    const last12Months = new Date();
+    last12Months.setMonth(last12Months.getMonth() - 12);
+    const monthlyTrends = await Certificate.aggregate([
+      { $match: { createdAt: { $gte: last12Months } } },
+      {
+        $group: {
+          _id: { year: { $year: '$createdAt' }, month: { $month: '$createdAt' } },
+          documents: { $sum: 1 },
+          verifications: { $sum: '$verificationCount' },
+          downloads: { $sum: '$downloadCount' },
+        }
+      },
+      { $sort: { '_id.year': 1, '_id.month': 1 } }
+    ]);
+
+    // Get top verified documents
+    const topVerified = await Certificate.find()
+      .sort({ verificationCount: -1 })
+      .limit(10)
+      .select('certificateId title verificationCount createdAt primaryDetails.documentType');
+
+    // Get recent activity
+    const recentDocuments = await Certificate.find()
+      .sort({ createdAt: -1 })
+      .limit(10)
+      .select('certificateId title createdAt primaryDetails.documentType extractionStatus');
+
+    // Get average processing metrics
+    const processingMetrics = await Certificate.aggregate([
+      {
+        $group: {
+          _id: null,
+          avgWordCount: { $avg: '$fullDetails.wordCount' },
+          avgLineCount: { $avg: '$fullDetails.lineCount' },
+          totalWithOCR: {
+            $sum: { $cond: [{ $gt: ['$fullDetails.extractionMetadata.ocrConfidence', 0] }, 1, 0] }
+          },
+        }
+      }
+    ]);
+
+    // Get blockchain stats
+    const blockchainStats = await blockchainService.getStats();
+
+    // Compile analytics data
+    const analyticsData = {
+      overview: {
+        totalCertificates,
+        totalUsers,
+        totalVerifications: verificationStats[0]?.totalVerifications || 0,
+        totalFullAccess: verificationStats[0]?.totalFullAccess || 0,
+        totalDownloads: verificationStats[0]?.totalDownloads || 0,
+        avgConfidenceScore: Math.round(verificationStats[0]?.avgConfidence || 0),
+      },
+      distributions: {
+        byStatus: statusCounts.reduce((acc, s) => ({ ...acc, [s._id || 'unknown']: s.count }), {}),
+        byType: typeDistribution.map(t => ({ type: t._id || 'unknown', count: t.count })),
+        byUserRole: roleDistribution.reduce((acc, r) => ({ ...acc, [r._id || 'user']: r.count }), {}),
+      },
+      activity: {
+        hourly: hourlyActivity.map(h => ({ hour: h._id, ...h })),
+        daily: dailyActivity,
+        monthly: monthlyTrends.map(m => ({
+          month: `${m._id.year}-${String(m._id.month).padStart(2, '0')}`,
+          documents: m.documents,
+          verifications: m.verifications,
+          downloads: m.downloads,
+        })),
+      },
+      topPerformers: {
+        mostVerified: topVerified,
+        recentDocuments,
+      },
+      processing: {
+        avgWordCount: Math.round(processingMetrics[0]?.avgWordCount || 0),
+        avgLineCount: Math.round(processingMetrics[0]?.avgLineCount || 0),
+        ocrProcessedCount: processingMetrics[0]?.totalWithOCR || 0,
+      },
+      blockchain: blockchainStats,
+      services: {
+        ai: aiService.checkAvailability() ? 'active' : 'fallback',
+        cache: cacheService.isAvailable() ? 'redis' : 'memory',
+        blockchain: blockchainService.isAvailable() ? 'connected' : 'disconnected',
+      },
+      generatedAt: new Date().toISOString(),
+    };
+
+    // Cache for 5 minutes
+    await cacheService.cacheAnalytics('detailed', analyticsData, 300);
+
+    res.json({
+      success: true,
+      data: analyticsData,
+      cached: false,
+    });
+  } catch (error) {
+    console.error('Analytics error:', error);
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+// GET /api/analytics/realtime - Get real-time metrics
+app.get('/api/analytics/realtime', authenticateToken, async (req, res) => {
+  try {
+    const user = await User.findById(req.user.id);
+    if (user?.role !== 'admin') {
+      return res.status(403).json({ success: false, message: 'Admin access required' });
+    }
+
+    // Get last hour stats
+    const lastHour = new Date(Date.now() - 60 * 60 * 1000);
+    const last5Minutes = new Date(Date.now() - 5 * 60 * 1000);
+
+    const [recentDocs, veryRecentDocs] = await Promise.all([
+      Certificate.countDocuments({ createdAt: { $gte: lastHour } }),
+      Certificate.countDocuments({ createdAt: { $gte: last5Minutes } }),
+    ]);
+
+    const recentVerifications = await Certificate.aggregate([
+      { $match: { lastVerifiedAt: { $gte: lastHour } } },
+      { $group: { _id: null, count: { $sum: 1 } } }
+    ]);
+
+    res.json({
+      success: true,
+      data: {
+        lastHour: {
+          newDocuments: recentDocs,
+          verifications: recentVerifications[0]?.count || 0,
+        },
+        last5Minutes: {
+          newDocuments: veryRecentDocs,
+        },
+        timestamp: new Date().toISOString(),
+      },
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
 });
 
 // GET /api/stats - Get dashboard statistics
@@ -1488,6 +1967,139 @@ app.post('/api/documents/bulk-issue', authenticateToken, async (req, res) => {
     });
   } catch (error) {
     console.error('Bulk issue error:', error);
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+// POST /api/documents/wysiwyg - Save a WYSIWYG document created in the editor
+app.post('/api/documents/wysiwyg', authenticateToken, async (req, res) => {
+  try {
+    const { canvasData, preview, documentType, templateId, templateName } = req.body;
+    
+    // Validate required fields
+    if (!canvasData || !preview) {
+      return res.status(400).json({ 
+        success: false, 
+        message: 'Canvas data and preview image are required' 
+      });
+    }
+    
+    // Generate unique IDs
+    const documentId = generateCertificateId();
+    const accessKey = generateAccessKey();
+    
+    // Generate document hash from canvas data
+    const documentHash = crypto.createHash('sha256')
+      .update(JSON.stringify(canvasData))
+      .digest('hex');
+    
+    // Upload preview image to Cloudinary (if configured)
+    let previewUrl = preview;
+    if (isCloudinaryConfigured()) {
+      try {
+        const cloudinaryResult = await uploadBase64ToCloudinary(preview);
+        previewUrl = cloudinaryResult.secure_url || cloudinaryResult.url;
+      } catch (uploadErr) {
+        console.log('Cloudinary upload failed, using base64 preview');
+      }
+    }
+    
+    // Generate QR code
+    const qrData = JSON.stringify({ 
+      documentId, 
+      type: documentType,
+      url: `${process.env.FRONTEND_URL || 'http://localhost:5173'}/verify/${documentId}`
+    });
+    const qrCode = await QRCode.toDataURL(qrData, { width: 300, margin: 2 });
+    
+    // Extract text content from canvas objects for search/indexing
+    const textContent = [];
+    if (canvasData.objects) {
+      canvasData.objects.forEach(obj => {
+        if (obj.type === 'i-text' || obj.type === 'text') {
+          textContent.push(obj.text || '');
+        }
+      });
+    }
+    
+    // Determine title from template or canvas content
+    let title = templateName || 'WYSIWYG Document';
+    const recipientText = textContent.find(t => t !== 'CERTIFICATE' && t.length > 3 && !t.includes('certify'));
+    if (recipientText) {
+      title = `${templateName || 'Document'} - ${recipientText}`;
+    }
+    
+    // Create the document record
+    const certificate = await Certificate.create({
+      certificateId: documentId,
+      title,
+      documentHash,
+      accessKey,
+      qrCode,
+      previewUrl,
+      originalFilename: `${documentId}.canvas`,
+      fileType: 'application/json',
+      extractionStatus: 'completed',
+      issuedBy: req.user.id,
+      primaryDetails: {
+        documentType: documentType || 'certificate',
+        templateId: templateId || 'custom',
+        fields: {
+          createdWith: 'WYSIWYG Editor',
+          templateName: templateName || 'Custom',
+          objectCount: canvasData.objects?.length || 0,
+        },
+        hash: documentHash,
+        extractedAt: new Date(),
+        confidenceScore: 100,
+      },
+      fullDetails: {
+        rawText: textContent.join('\n'),
+        canvasData: JSON.stringify(canvasData),
+        structuredData: new Map([
+          ['documentType', documentType || 'certificate'],
+          ['templateName', templateName || 'Custom'],
+          ['editorVersion', '1.0'],
+        ]),
+        dates: [],
+        signatures: [],
+        lineCount: textContent.length,
+        wordCount: textContent.join(' ').split(' ').filter(w => w).length,
+        hash: documentHash,
+        extractionMetadata: { 
+          canvasWidth: canvasData.width,
+          canvasHeight: canvasData.height,
+          objectCount: canvasData.objects?.length || 0,
+          createdWith: 'WYSIWYG Editor',
+        },
+      },
+      verificationSummary: {
+        documentType: documentType || 'certificate',
+        holderName: recipientText || 'Not specified',
+        documentNumber: documentId,
+        issueDate: new Date().toISOString().split('T')[0],
+        issuingAuthority: req.user.email,
+        confidenceScore: 100,
+        integrityHash: documentHash,
+      },
+    });
+    
+    res.status(201).json({
+      success: true,
+      message: 'Document saved successfully',
+      data: {
+        documentId: certificate.certificateId,
+        accessKey: certificate.accessKey,
+        documentHash: certificate.documentHash,
+        qrCode: certificate.qrCode,
+        previewUrl,
+        title: certificate.title,
+        verifyUrl: `${process.env.FRONTEND_URL || 'http://localhost:5173'}/verify/${documentId}`,
+        createdAt: certificate.createdAt,
+      }
+    });
+  } catch (error) {
+    console.error('WYSIWYG save error:', error);
     res.status(500).json({ success: false, message: error.message });
   }
 });

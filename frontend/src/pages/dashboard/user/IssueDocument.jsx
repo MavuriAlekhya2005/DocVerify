@@ -12,7 +12,8 @@ import {
   HiDownload,
   HiQrcode,
   HiViewGrid,
-  HiPhotograph
+  HiPhotograph,
+  HiLightningBolt
 } from 'react-icons/hi';
 import { toast } from 'react-hot-toast';
 import QRCode from 'qrcode';
@@ -24,6 +25,8 @@ import {
   getTemplatesByType,
   getFieldsByType,
 } from '../../../data/documentTemplates';
+import { AIDocumentUploader, AIFormHelper } from '../../../components/ai';
+import { GasEstimator } from '../../../components/blockchain';
 
 const IssueDocument = () => {
   const [step, setStep] = useState(1);
@@ -387,6 +390,19 @@ const IssueDocument = () => {
         <p className="text-gray-400">Fill in the information for your {DOCUMENT_TYPE_LABELS[documentType]}</p>
       </div>
       
+      {/* AI Document Uploader */}
+      <div className="mb-6">
+        <AIDocumentUploader 
+          documentType={documentType}
+          onFieldsExtracted={(extractedFields) => {
+            setFormData(prev => ({ ...prev, ...extractedFields }));
+            toast.success('Fields extracted with AI!');
+          }}
+          className="mb-4"
+        />
+        <AIFormHelper />
+      </div>
+      
       <div className="grid md:grid-cols-2 gap-6 max-h-[60vh] overflow-y-auto p-2">
         {fields.filter(f => f.type !== 'items').map((field) => (
           <div key={field.name} className={field.type === 'textarea' ? 'md:col-span-2' : ''}>
@@ -658,6 +674,14 @@ const IssueDocument = () => {
                 </li>
               </ul>
             </div>
+            
+            {/* Gas Estimation */}
+            <GasEstimator 
+              operationType="register" 
+              documentCount={1}
+              showDetails={false}
+              className="mt-4"
+            />
           </>
         )}
       </div>

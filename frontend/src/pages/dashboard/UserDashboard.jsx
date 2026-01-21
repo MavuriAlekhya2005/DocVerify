@@ -31,7 +31,6 @@ const UserDashboard = () => {
   const menuItems = [
     { name: 'Dashboard', icon: HiHome, path: '/dashboard' },
     { name: 'Create Document', icon: HiPencilAlt, path: '/dashboard/create' },
-    { name: 'Issue Document', icon: HiDocumentAdd, path: '/dashboard/issue' },
     { name: 'Bulk Issue', icon: HiCollection, path: '/dashboard/bulk-issue' },
     { name: 'Upload Document', icon: HiUpload, path: '/dashboard/upload' },
     { name: 'My Documents', icon: HiDocumentText, path: '/dashboard/certificates' },
@@ -107,7 +106,10 @@ const UserDashboard = () => {
                   key={item.path}
                   to={item.path}
                   end={item.path === '/dashboard'}
-                  onClick={() => setSidebarOpen(false)}
+                  onClick={(e) => {
+                    handleMenuClick(item, e);
+                    if (!item.newWindow) setSidebarOpen(false);
+                  }}
                   className={({ isActive }) =>
                     isActive ? 'sidebar-link-active' : 'sidebar-link'
                   }

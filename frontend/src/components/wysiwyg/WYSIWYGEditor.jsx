@@ -1,786 +1,634 @@
 /**
- * WYSIWYG Document Editor - Main Component
- * Full-featured visual document editor with canvas, toolbar, and sidebar
+ * WYSIWYG Document Editor Component
+ * Uses Fabric.js for canvas manipulation
  */
-
-import { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useRef, useState, useEffect, useCallback } from 'react';
 import * as fabric from 'fabric';
-import { v4 as uuidv4 } from 'uuid';
-import { toast } from 'react-hot-toast';
 import {
-  HiSave,
-  HiDownload,
-  HiEye,
-  HiTemplate,
-  HiPhotograph,
-  HiQrcode,
-  HiPencil,
-  HiTrash,
-  HiDuplicate,
-  HiArrowUp,
-  HiArrowDown,
-  HiRefresh,
-  HiX,
-  HiPlus,
-  HiDocumentText,
-  HiColorSwatch,
-  HiMenu,
+  HiPlus, HiTrash, HiDuplicate, HiSave, HiDownload,
+  HiZoomIn, HiZoomOut, HiArrowUp, HiArrowDown,
+  HiPhotograph, HiTemplate
 } from 'react-icons/hi';
-import EditorToolbar from './EditorToolbar';
-import EditorSidebar from './EditorSidebar';
-import ElementPalette from './ElementPalette';
-import TemplateGallery from './TemplateGallery';
-import { exportToPDF, exportToPNG } from './utils/exportUtils';
-import api from '../../services/api';
 
-// Default canvas dimensions (A4 at 96 DPI)
-const CANVAS_WIDTH = 794;
-const CANVAS_HEIGHT = 1123;
-
-const WYSIWYGEditor = ({ 
-  documentType = 'certificate',
-  initialTemplate = null,
-  initialData = null,
-  onSave = null,
-  onClose = null,
-}) => {
-  // Canvas ref and fabric instance
+const WYSIWYGEditor = ({ template, documentType, onSave, onExport }) => {
   const canvasRef = useRef(null);
-  const fabricRef = useRef(null);
-  
-  // State
-  const [isLoading, setIsLoading] = useState(true);
-  const [selectedObject, setSelectedObject] = useState(null);
-  const [canvasObjects, setCanvasObjects] = useState([]);
-  const [documentData, setDocumentData] = useState({
-    id: uuidv4(),
-    type: documentType,
-    fields: {},
-    createdAt: new Date().toISOString(),
-  });
-  const [showTemplates, setShowTemplates] = useState(!initialTemplate);
-  const [showElements, setShowElements] = useState(false);
-  const [zoom, setZoom] = useState(1);
-  const [history, setHistory] = useState([]);
-  const [historyIndex, setHistoryIndex] = useState(-1);
-  const [isDirty, setIsDirty] = useState(false);
+  const [canvas, setCanvas] = useState(null);
+  const [activeObject, setActiveObject] = useState(null);
+  const [zoom, setZoom] = useState(0.75);
+  const [layers, setLayers] = useState([]);
 
-  // Initialize Fabric.js canvas
+  // Canvas dimensions based on document type
+  const getCanvasSize = () => {
+    if (template?.layout === 'landscape') return { width: 1000, height: 700 };
+    if (template?.layout === 'horizontal') return { width: 450, height: 280 };
+    if (template?.layout === 'vertical') return { width: 280, height: 450 };
+    return { width: 700, height: 1000 }; // Portrait default
+  };
+
+  const size = getCanvasSize();
+
+  // Initialize canvas
   useEffect(() => {
     if (!canvasRef.current) return;
 
-    const canvas = new fabric.Canvas(canvasRef.current, {
-      width: CANVAS_WIDTH,
-      height: CANVAS_HEIGHT,
+    const fabricCanvas = new fabric.Canvas(canvasRef.current, {
+      width: size.width,
+      height: size.height,
       backgroundColor: '#ffffff',
       selection: true,
       preserveObjectStacking: true,
     });
 
-    fabricRef.current = canvas;
+    // Selection events
+    fabricCanvas.on('selection:created', (e) => setActiveObject(e.selected?.[0] || null));
+    fabricCanvas.on('selection:updated', (e) => setActiveObject(e.selected?.[0] || null));
+    fabricCanvas.on('selection:cleared', () => setActiveObject(null));
+    fabricCanvas.on('object:added', () => refreshLayers(fabricCanvas));
+    fabricCanvas.on('object:removed', () => refreshLayers(fabricCanvas));
+    fabricCanvas.on('object:modified', () => refreshLayers(fabricCanvas));
 
-    // Event listeners
-    canvas.on('selection:created', handleObjectSelected);
-    canvas.on('selection:updated', handleObjectSelected);
-    canvas.on('selection:cleared', handleSelectionCleared);
-    canvas.on('object:modified', handleObjectModified);
-    canvas.on('object:added', handleCanvasChange);
-    canvas.on('object:removed', handleCanvasChange);
+    setCanvas(fabricCanvas);
 
-    // Load initial template or data
-    if (initialTemplate) {
-      loadTemplate(initialTemplate);
-    } else if (initialData) {
-      loadCanvasData(initialData);
+    // Apply template
+    if (template) {
+      setTimeout(() => applyTemplate(fabricCanvas, template), 100);
     }
 
-    setIsLoading(false);
-
-    // Cleanup
-    return () => {
-      canvas.dispose();
-    };
+    return () => fabricCanvas.dispose();
   }, []);
 
-  // Handle object selection
-  const handleObjectSelected = (e) => {
-    setSelectedObject(e.selected?.[0] || null);
-  };
-
-  const handleSelectionCleared = () => {
-    setSelectedObject(null);
-  };
-
-  // Handle canvas changes
-  const handleObjectModified = () => {
-    saveToHistory();
-    setIsDirty(true);
-    updateCanvasObjects();
-  };
-
-  const handleCanvasChange = () => {
-    updateCanvasObjects();
-  };
-
-  // Update canvas objects list
-  const updateCanvasObjects = useCallback(() => {
-    if (!fabricRef.current) return;
-    const objects = fabricRef.current.getObjects().map((obj, index) => ({
-      id: obj.id || `obj-${index}`,
+  const refreshLayers = (c) => {
+    if (!c) return;
+    const objs = c.getObjects();
+    setLayers(objs.map((obj, i) => ({
+      id: i,
+      name: obj.customName || obj.type || 'Object',
       type: obj.type,
-      name: obj.name || `${obj.type}-${index}`,
-      visible: obj.visible !== false,
-      locked: obj.lockMovementX && obj.lockMovementY,
-    }));
-    setCanvasObjects(objects);
-  }, []);
-
-  // History management
-  const saveToHistory = () => {
-    if (!fabricRef.current) return;
-    const json = fabricRef.current.toJSON(['id', 'name', 'fieldId', 'isPlaceholder']);
-    const newHistory = history.slice(0, historyIndex + 1);
-    newHistory.push(json);
-    setHistory(newHistory);
-    setHistoryIndex(newHistory.length - 1);
+    })));
   };
 
-  const undo = async () => {
-    if (historyIndex <= 0 || !fabricRef.current) return;
-    const prevIndex = historyIndex - 1;
-    await fabricRef.current.loadFromJSON(history[prevIndex]);
-    fabricRef.current.renderAll();
-    setHistoryIndex(prevIndex);
-    updateCanvasObjects();
-  };
+  // Apply template design to canvas
+  const applyTemplate = (c, tmpl) => {
+    if (!c || !tmpl) return;
 
-  const redo = async () => {
-    if (historyIndex >= history.length - 1 || !fabricRef.current) return;
-    const nextIndex = historyIndex + 1;
-    await fabricRef.current.loadFromJSON(history[nextIndex]);
-    fabricRef.current.renderAll();
-    setHistoryIndex(nextIndex);
-    updateCanvasObjects();
-  };
+    const colors = tmpl.colors || { primary: '#1e3a5f', secondary: '#c9a227', accent: '#fef3c7', text: '#1e293b' };
+    const { width, height } = size;
 
-  // Template loading
-  const loadTemplate = async (template) => {
-    if (!fabricRef.current) return;
-    
-    fabricRef.current.clear();
-    
-    // Load template background and elements
-    if (template.canvasData) {
-      await fabricRef.current.loadFromJSON(template.canvasData);
-      fabricRef.current.renderAll();
-      saveToHistory();
-      updateCanvasObjects();
-    } else {
-      // Create default template structure
-      createDefaultTemplate(template);
-    }
-    
-    setShowTemplates(false);
-  };
+    // Background
+    c.backgroundColor = colors.accent || '#ffffff';
 
-  // Create default template based on type
-  const createDefaultTemplate = (template) => {
-    const canvas = fabricRef.current;
-    if (!canvas) return;
-
-    // Add background (Fabric.js v7 syntax)
-    canvas.backgroundColor = template.colors?.background || '#ffffff';
-    canvas.renderAll();
-
-    // Add border
+    // Border frame
     const border = new fabric.Rect({
       left: 20,
       top: 20,
-      width: CANVAS_WIDTH - 40,
-      height: CANVAS_HEIGHT - 40,
+      width: width - 40,
+      height: height - 40,
       fill: 'transparent',
-      stroke: template.colors?.primary || '#1e40af',
+      stroke: colors.secondary,
       strokeWidth: 3,
       selectable: false,
-      id: 'border',
-      name: 'Border',
+      customName: 'Border',
     });
-    canvas.add(border);
+    c.add(border);
 
-    // Add inner border
+    // Inner border
     const innerBorder = new fabric.Rect({
       left: 30,
       top: 30,
-      width: CANVAS_WIDTH - 60,
-      height: CANVAS_HEIGHT - 60,
+      width: width - 60,
+      height: height - 60,
       fill: 'transparent',
-      stroke: template.colors?.secondary || '#3b82f6',
+      stroke: colors.primary,
       strokeWidth: 1,
       selectable: false,
-      id: 'inner-border',
-      name: 'Inner Border',
+      customName: 'Inner Border',
     });
-    canvas.add(innerBorder);
+    c.add(innerBorder);
 
-    // Add title placeholder
+    // Header decoration
+    if (tmpl.style === 'modern' || tmpl.style === 'corporate' || tmpl.style === 'tech') {
+      const header = new fabric.Rect({
+        left: 0,
+        top: 0,
+        width: width,
+        height: 100,
+        fill: colors.primary,
+        selectable: false,
+        customName: 'Header',
+      });
+      c.add(header);
+    }
+
+    // Title
     const title = new fabric.IText('CERTIFICATE', {
-      left: CANVAS_WIDTH / 2,
-      top: 100,
-      fontSize: 48,
-      fontFamily: 'Georgia',
-      fontWeight: 'bold',
-      fill: template.colors?.primary || '#1e40af',
+      left: width / 2,
+      top: tmpl.style === 'modern' ? 40 : 80,
       originX: 'center',
-      id: 'title',
-      name: 'Title',
-      isPlaceholder: false,
+      fontSize: 42,
+      fontFamily: 'Georgia, serif',
+      fontWeight: 'bold',
+      fill: tmpl.style === 'modern' ? '#ffffff' : colors.primary,
+      customName: 'Title',
     });
-    canvas.add(title);
+    c.add(title);
 
-    // Add subtitle
+    // Subtitle
     const subtitle = new fabric.IText('of Achievement', {
-      left: CANVAS_WIDTH / 2,
-      top: 160,
+      left: width / 2,
+      top: title.top + 50,
+      originX: 'center',
       fontSize: 24,
-      fontFamily: 'Georgia',
-      fill: '#666666',
-      originX: 'center',
-      id: 'subtitle',
-      name: 'Subtitle',
-    });
-    canvas.add(subtitle);
-
-    // Add "This certifies that" text
-    const certifyText = new fabric.IText('This is to certify that', {
-      left: CANVAS_WIDTH / 2,
-      top: 280,
-      fontSize: 18,
-      fontFamily: 'Georgia',
-      fill: '#333333',
-      originX: 'center',
-      id: 'certify-text',
-      name: 'Certify Text',
-    });
-    canvas.add(certifyText);
-
-    // Add recipient name placeholder
-    const recipientName = new fabric.IText('{{recipientName}}', {
-      left: CANVAS_WIDTH / 2,
-      top: 340,
-      fontSize: 36,
-      fontFamily: 'Georgia',
-      fontWeight: 'bold',
-      fill: template.colors?.primary || '#1e40af',
-      originX: 'center',
-      id: 'recipient-name',
-      name: 'Recipient Name',
-      fieldId: 'recipientName',
-      isPlaceholder: true,
-    });
-    canvas.add(recipientName);
-
-    // Add description text
-    const description = new fabric.IText('has successfully completed', {
-      left: CANVAS_WIDTH / 2,
-      top: 420,
-      fontSize: 18,
-      fontFamily: 'Georgia',
-      fill: '#333333',
-      originX: 'center',
-      id: 'description',
-      name: 'Description',
-    });
-    canvas.add(description);
-
-    // Add course/achievement placeholder
-    const courseName = new fabric.IText('{{courseName}}', {
-      left: CANVAS_WIDTH / 2,
-      top: 470,
-      fontSize: 28,
-      fontFamily: 'Georgia',
-      fontWeight: 'bold',
-      fill: '#333333',
-      originX: 'center',
-      id: 'course-name',
-      name: 'Course Name',
-      fieldId: 'courseName',
-      isPlaceholder: true,
-    });
-    canvas.add(courseName);
-
-    // Add date placeholder
-    const dateText = new fabric.IText('Issued on {{issueDate}}', {
-      left: CANVAS_WIDTH / 2,
-      top: 550,
-      fontSize: 16,
-      fontFamily: 'Georgia',
-      fill: '#666666',
-      originX: 'center',
-      id: 'issue-date',
-      name: 'Issue Date',
-      fieldId: 'issueDate',
-      isPlaceholder: true,
-    });
-    canvas.add(dateText);
-
-    // Add signature line
-    const sigLine = new fabric.Line([CANVAS_WIDTH / 2 - 100, 700, CANVAS_WIDTH / 2 + 100, 700], {
-      stroke: '#333333',
-      strokeWidth: 1,
-      id: 'signature-line',
-      name: 'Signature Line',
-    });
-    canvas.add(sigLine);
-
-    // Add signatory name placeholder
-    const signatoryName = new fabric.IText('{{signatoryName}}', {
-      left: CANVAS_WIDTH / 2,
-      top: 710,
-      fontSize: 16,
-      fontFamily: 'Georgia',
-      fill: '#333333',
-      originX: 'center',
-      id: 'signatory-name',
-      name: 'Signatory Name',
-      fieldId: 'signatoryName',
-      isPlaceholder: true,
-    });
-    canvas.add(signatoryName);
-
-    // Add signatory title
-    const signatoryTitle = new fabric.IText('{{signatoryTitle}}', {
-      left: CANVAS_WIDTH / 2,
-      top: 735,
-      fontSize: 14,
-      fontFamily: 'Georgia',
+      fontFamily: 'Georgia, serif',
       fontStyle: 'italic',
-      fill: '#666666',
-      originX: 'center',
-      id: 'signatory-title',
-      name: 'Signatory Title',
-      fieldId: 'signatoryTitle',
-      isPlaceholder: true,
+      fill: colors.secondary,
+      customName: 'Subtitle',
     });
-    canvas.add(signatoryTitle);
+    c.add(subtitle);
 
-    // Add QR code placeholder area
-    const qrPlaceholder = new fabric.Rect({
-      left: CANVAS_WIDTH - 150,
-      top: CANVAS_HEIGHT - 180,
-      width: 100,
-      height: 100,
-      fill: '#f0f0f0',
-      stroke: '#cccccc',
-      strokeWidth: 1,
-      id: 'qr-placeholder',
-      name: 'QR Code Area',
-    });
-    canvas.add(qrPlaceholder);
-
-    const qrText = new fabric.IText('QR Code', {
-      left: CANVAS_WIDTH - 100,
-      top: CANVAS_HEIGHT - 130,
-      fontSize: 12,
-      fontFamily: 'Arial',
-      fill: '#999999',
+    // "This is to certify that"
+    const certifyText = new fabric.IText('This is to certify that', {
+      left: width / 2,
+      top: subtitle.top + 60,
       originX: 'center',
+      fontSize: 14,
+      fontFamily: 'Georgia, serif',
+      fill: colors.text,
+      customName: 'Certify Text',
+    });
+    c.add(certifyText);
+
+    // Recipient Name Placeholder
+    const recipientName = new fabric.IText('Recipient Name', {
+      left: width / 2,
+      top: certifyText.top + 40,
+      originX: 'center',
+      fontSize: 32,
+      fontFamily: 'Georgia, serif',
+      fontWeight: 'bold',
+      fill: colors.primary,
+      customName: 'Recipient Name',
+    });
+    c.add(recipientName);
+
+    // Underline
+    const underline = new fabric.Line([width / 2 - 150, recipientName.top + 45, width / 2 + 150, recipientName.top + 45], {
+      stroke: colors.secondary,
+      strokeWidth: 2,
       selectable: false,
-      id: 'qr-text',
-      name: 'QR Label',
+      customName: 'Underline',
     });
-    canvas.add(qrText);
+    c.add(underline);
 
-    canvas.renderAll();
-    saveToHistory();
-    updateCanvasObjects();
-  };
-
-  // Load existing canvas data
-  const loadCanvasData = async (data) => {
-    if (!fabricRef.current || !data) return;
-    await fabricRef.current.loadFromJSON(data);
-    fabricRef.current.renderAll();
-    saveToHistory();
-    updateCanvasObjects();
-  };
-
-  // Add elements to canvas
-  const addText = (text = 'New Text', options = {}) => {
-    const canvas = fabricRef.current;
-    if (!canvas) return;
-
-    const textObj = new fabric.IText(text, {
-      left: CANVAS_WIDTH / 2,
-      top: CANVAS_HEIGHT / 2,
-      fontSize: options.fontSize || 24,
-      fontFamily: options.fontFamily || 'Arial',
-      fill: options.fill || '#333333',
+    // "has successfully completed"
+    const completedText = new fabric.IText('has successfully completed', {
+      left: width / 2,
+      top: underline.top + 20,
       originX: 'center',
-      id: uuidv4(),
-      name: options.name || 'Text',
-      ...options,
+      fontSize: 14,
+      fontFamily: 'Georgia, serif',
+      fill: colors.text,
+      customName: 'Completed Text',
     });
+    c.add(completedText);
 
-    canvas.add(textObj);
-    canvas.setActiveObject(textObj);
-    canvas.renderAll();
-    saveToHistory();
-  };
-
-  const addPlaceholder = (fieldId, displayText, options = {}) => {
-    const canvas = fabricRef.current;
-    if (!canvas) return;
-
-    const placeholder = new fabric.IText(`{{${fieldId}}}`, {
-      left: CANVAS_WIDTH / 2,
-      top: CANVAS_HEIGHT / 2,
-      fontSize: options.fontSize || 24,
-      fontFamily: options.fontFamily || 'Arial',
-      fill: options.fill || '#1e40af',
+    // Course Name Placeholder
+    const courseName = new fabric.IText('Course Name', {
+      left: width / 2,
+      top: completedText.top + 35,
       originX: 'center',
-      id: uuidv4(),
-      name: displayText || fieldId,
-      fieldId: fieldId,
-      isPlaceholder: true,
-      ...options,
+      fontSize: 22,
+      fontFamily: 'Georgia, serif',
+      fontWeight: 'bold',
+      fill: colors.primary,
+      customName: 'Course Name',
     });
+    c.add(courseName);
 
-    canvas.add(placeholder);
-    canvas.setActiveObject(placeholder);
-    canvas.renderAll();
-    saveToHistory();
+    // Date
+    const dateText = new fabric.IText('Date: _______________', {
+      left: 80,
+      top: height - 100,
+      fontSize: 12,
+      fontFamily: 'Georgia, serif',
+      fill: colors.text,
+      customName: 'Date',
+    });
+    c.add(dateText);
 
-    // Add field to document data
-    setDocumentData(prev => ({
-      ...prev,
-      fields: {
-        ...prev.fields,
-        [fieldId]: { label: displayText, value: '', type: 'text' },
-      },
-    }));
+    // Signature
+    const signatureText = new fabric.IText('Signature: _______________', {
+      left: width - 220,
+      top: height - 100,
+      fontSize: 12,
+      fontFamily: 'Georgia, serif',
+      fill: colors.text,
+      customName: 'Signature',
+    });
+    c.add(signatureText);
+
+    c.renderAll();
+    refreshLayers(c);
   };
 
-  const addImage = (imageUrl, options = {}) => {
-    const canvas = fabricRef.current;
+  // Add elements
+  const addText = (type) => {
     if (!canvas) return;
-
-    fabric.FabricImage.fromURL(imageUrl, { crossOrigin: 'anonymous' }).then((img) => {
-      img.set({
-        left: options.left || CANVAS_WIDTH / 2,
-        top: options.top || CANVAS_HEIGHT / 2,
-        originX: 'center',
-        originY: 'center',
-        id: uuidv4(),
-        name: options.name || 'Image',
-        ...options,
-      });
-
-      // Scale to reasonable size
-      if (img.width > 300) {
-        img.scaleToWidth(300);
-      }
-
-      canvas.add(img);
-      canvas.setActiveObject(img);
-      canvas.renderAll();
-      saveToHistory();
-    });
-  };
-
-  const addShape = (shapeType, options = {}) => {
-    const canvas = fabricRef.current;
-    if (!canvas) return;
-
-    let shape;
-    const defaultOptions = {
-      left: CANVAS_WIDTH / 2,
-      top: CANVAS_HEIGHT / 2,
-      fill: options.fill || 'transparent',
-      stroke: options.stroke || '#333333',
-      strokeWidth: options.strokeWidth || 2,
-      originX: 'center',
-      originY: 'center',
-      id: uuidv4(),
-      name: options.name || shapeType,
+    const configs = {
+      heading: { text: 'Heading', fontSize: 28, fontWeight: 'bold' },
+      body: { text: 'Body text here', fontSize: 14, fontWeight: 'normal' },
     };
-
-    switch (shapeType) {
-      case 'rectangle':
-        shape = new fabric.Rect({
-          ...defaultOptions,
-          width: options.width || 200,
-          height: options.height || 100,
-        });
-        break;
-      case 'circle':
-        shape = new fabric.Circle({
-          ...defaultOptions,
-          radius: options.radius || 50,
-        });
-        break;
-      case 'line':
-        shape = new fabric.Line([0, 0, 200, 0], {
-          ...defaultOptions,
-          originX: 'left',
-        });
-        break;
-      default:
-        return;
-    }
-
-    canvas.add(shape);
-    canvas.setActiveObject(shape);
+    const cfg = configs[type] || configs.body;
+    const text = new fabric.IText(cfg.text, {
+      left: size.width / 2,
+      top: size.height / 2,
+      originX: 'center',
+      fontSize: cfg.fontSize,
+      fontWeight: cfg.fontWeight,
+      fontFamily: 'Georgia, serif',
+      fill: template?.colors?.text || '#1e293b',
+      customName: type === 'heading' ? 'Heading' : 'Text',
+    });
+    canvas.add(text);
+    canvas.setActiveObject(text);
     canvas.renderAll();
-    saveToHistory();
   };
 
-  // Delete selected object
-  const deleteSelected = () => {
-    const canvas = fabricRef.current;
+  const addShape = (type) => {
     if (!canvas) return;
-
-    const activeObject = canvas.getActiveObject();
-    if (activeObject) {
-      canvas.remove(activeObject);
-      canvas.renderAll();
-      saveToHistory();
-      setSelectedObject(null);
-    }
-  };
-
-  // Duplicate selected object
-  const duplicateSelected = () => {
-    const canvas = fabricRef.current;
-    if (!canvas) return;
-
-    const activeObject = canvas.getActiveObject();
-    if (activeObject) {
-      activeObject.clone((cloned) => {
-        cloned.set({
-          left: activeObject.left + 20,
-          top: activeObject.top + 20,
-          id: uuidv4(),
-          name: `${activeObject.name} Copy`,
-        });
-        canvas.add(cloned);
-        canvas.setActiveObject(cloned);
-        canvas.renderAll();
-        saveToHistory();
+    const colors = template?.colors || { primary: '#3b82f6', secondary: '#1e40af' };
+    let shape;
+    
+    if (type === 'rect') {
+      shape = new fabric.Rect({
+        left: size.width / 2 - 50,
+        top: size.height / 2 - 30,
+        width: 100,
+        height: 60,
+        fill: colors.primary,
+        rx: 4,
+        ry: 4,
+        customName: 'Rectangle',
+      });
+    } else if (type === 'circle') {
+      shape = new fabric.Circle({
+        left: size.width / 2 - 30,
+        top: size.height / 2 - 30,
+        radius: 30,
+        fill: colors.secondary,
+        customName: 'Circle',
+      });
+    } else if (type === 'line') {
+      shape = new fabric.Line([size.width / 2 - 50, size.height / 2, size.width / 2 + 50, size.height / 2], {
+        stroke: colors.primary,
+        strokeWidth: 2,
+        customName: 'Line',
       });
     }
+    
+    if (shape) {
+      canvas.add(shape);
+      canvas.setActiveObject(shape);
+      canvas.renderAll();
+    }
   };
 
-  // Layer management
-  const bringForward = () => {
-    const canvas = fabricRef.current;
-    if (!canvas || !selectedObject) return;
-    canvas.bringForward(selectedObject);
+  const addImage = () => {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = 'image/*';
+    input.onchange = (e) => {
+      const file = e.target.files?.[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = (evt) => {
+        fabric.FabricImage.fromURL(evt.target.result).then((img) => {
+          img.scaleToWidth(150);
+          img.set({ left: 50, top: 50, customName: 'Image' });
+          canvas.add(img);
+          canvas.setActiveObject(img);
+          canvas.renderAll();
+        });
+      };
+      reader.readAsDataURL(file);
+    };
+    input.click();
+  };
+
+  // Object actions
+  const deleteObject = () => {
+    if (!canvas || !activeObject) return;
+    canvas.remove(activeObject);
+    setActiveObject(null);
     canvas.renderAll();
-    saveToHistory();
+  };
+
+  const duplicateObject = () => {
+    if (!canvas || !activeObject) return;
+    activeObject.clone().then((cloned) => {
+      cloned.set({ left: activeObject.left + 20, top: activeObject.top + 20 });
+      canvas.add(cloned);
+      canvas.setActiveObject(cloned);
+      canvas.renderAll();
+    });
+  };
+
+  const bringForward = () => {
+    if (!canvas || !activeObject) return;
+    canvas.bringObjectForward(activeObject);
+    canvas.renderAll();
+    refreshLayers(canvas);
   };
 
   const sendBackward = () => {
-    const canvas = fabricRef.current;
-    if (!canvas || !selectedObject) return;
-    canvas.sendBackwards(selectedObject);
+    if (!canvas || !activeObject) return;
+    canvas.sendObjectBackwards(activeObject);
     canvas.renderAll();
-    saveToHistory();
+    refreshLayers(canvas);
   };
 
-  // Update field value
-  const updateFieldValue = (fieldId, value) => {
-    setDocumentData(prev => ({
-      ...prev,
-      fields: {
-        ...prev.fields,
-        [fieldId]: { ...prev.fields[fieldId], value },
-      },
-    }));
-    setIsDirty(true);
+  // Zoom
+  const handleZoom = (delta) => {
+    setZoom((z) => Math.max(0.25, Math.min(2, z + delta)));
+  };
 
-    // Update placeholder on canvas
-    const canvas = fabricRef.current;
+  // Save & Export
+  const handleSave = () => {
     if (!canvas) return;
-
-    canvas.getObjects().forEach(obj => {
-      if (obj.fieldId === fieldId && obj.isPlaceholder) {
-        // Keep the placeholder format but show value
-        obj.set('text', value || `{{${fieldId}}}`);
-      }
-    });
-    canvas.renderAll();
+    const json = canvas.toJSON(['customName']);
+    const preview = canvas.toDataURL({ format: 'png', quality: 1 });
+    onSave?.({ canvasData: json, preview });
   };
 
-  // Replace placeholders with actual values for export
-  const prepareFinalCanvas = () => {
-    const canvas = fabricRef.current;
+  const handleExport = () => {
     if (!canvas) return;
+    const dataUrl = canvas.toDataURL({ format: 'png', quality: 1, multiplier: 2 });
+    onExport?.('png', dataUrl);
+  };
 
-    canvas.getObjects().forEach(obj => {
-      if (obj.isPlaceholder && obj.fieldId) {
-        const fieldValue = documentData.fields[obj.fieldId]?.value;
-        if (fieldValue) {
-          obj.set('text', fieldValue);
-        }
-      }
-    });
+  // Property updates
+  const updateProperty = (prop, value) => {
+    if (!activeObject || !canvas) return;
+    activeObject.set(prop, value);
     canvas.renderAll();
-  };
-
-  // Export functions
-  const handleExportPDF = async () => {
-    try {
-      prepareFinalCanvas();
-      await exportToPDF(fabricRef.current, documentData.id);
-      toast.success('PDF exported successfully!');
-    } catch (error) {
-      toast.error('Failed to export PDF');
-      console.error(error);
-    }
-  };
-
-  const handleExportPNG = async () => {
-    try {
-      prepareFinalCanvas();
-      await exportToPNG(fabricRef.current, documentData.id);
-      toast.success('PNG exported successfully!');
-    } catch (error) {
-      toast.error('Failed to export PNG');
-      console.error(error);
-    }
-  };
-
-  // Save document
-  const handleSave = async () => {
-    if (!fabricRef.current) return;
-
-    try {
-      const canvasData = fabricRef.current.toJSON(['id', 'name', 'fieldId', 'isPlaceholder']);
-      
-      const documentPayload = {
-        ...documentData,
-        canvasData,
-        updatedAt: new Date().toISOString(),
-      };
-
-      if (onSave) {
-        await onSave(documentPayload);
-      }
-
-      setIsDirty(false);
-      toast.success('Document saved!');
-    } catch (error) {
-      toast.error('Failed to save document');
-      console.error(error);
-    }
-  };
-
-  // Zoom controls
-  const handleZoomIn = () => {
-    setZoom(prev => Math.min(prev + 0.1, 2));
-  };
-
-  const handleZoomOut = () => {
-    setZoom(prev => Math.max(prev - 0.1, 0.5));
-  };
-
-  const handleZoomReset = () => {
-    setZoom(1);
   };
 
   return (
-    <div className="h-screen flex flex-col bg-gray-900">
-      {/* Top Toolbar */}
-      <EditorToolbar
-        selectedObject={selectedObject}
-        canvas={fabricRef.current}
-        onUndo={undo}
-        onRedo={redo}
-        canUndo={historyIndex > 0}
-        canRedo={historyIndex < history.length - 1}
-        onSave={handleSave}
-        onExportPDF={handleExportPDF}
-        onExportPNG={handleExportPNG}
-        onClose={onClose}
-        isDirty={isDirty}
-        zoom={zoom}
-        onZoomIn={handleZoomIn}
-        onZoomOut={handleZoomOut}
-        onZoomReset={handleZoomReset}
-      />
+    <div className="h-full flex bg-gray-100">
+      {/* Left Sidebar - Elements */}
+      <div className="w-56 bg-white border-r border-gray-200 p-4 overflow-y-auto flex-shrink-0">
+        <h3 className="text-xs font-semibold text-gray-500 uppercase mb-3">Add Elements</h3>
+        
+        {/* Text */}
+        <div className="space-y-2 mb-6">
+          <button
+            onClick={() => addText('heading')}
+            className="w-full p-2 text-left text-sm bg-gray-50 hover:bg-blue-50 hover:text-blue-600 rounded border border-gray-200 transition-colors"
+          >
+            + Heading
+          </button>
+          <button
+            onClick={() => addText('body')}
+            className="w-full p-2 text-left text-sm bg-gray-50 hover:bg-blue-50 hover:text-blue-600 rounded border border-gray-200 transition-colors"
+          >
+            + Body Text
+          </button>
+        </div>
 
-      <div className="flex-1 flex overflow-hidden">
-        {/* Left Panel - Element Palette */}
-        <ElementPalette
-          isOpen={showElements}
-          onToggle={() => setShowElements(!showElements)}
-          onAddText={addText}
-          onAddPlaceholder={addPlaceholder}
-          onAddImage={addImage}
-          onAddShape={addShape}
-          onShowTemplates={() => setShowTemplates(true)}
-        />
+        {/* Shapes */}
+        <h3 className="text-xs font-semibold text-gray-500 uppercase mb-3">Shapes</h3>
+        <div className="grid grid-cols-3 gap-2 mb-6">
+          <button onClick={() => addShape('rect')} className="p-3 bg-gray-50 hover:bg-blue-50 rounded border border-gray-200">
+            <div className="w-6 h-4 bg-blue-500 rounded-sm mx-auto" />
+          </button>
+          <button onClick={() => addShape('circle')} className="p-3 bg-gray-50 hover:bg-blue-50 rounded border border-gray-200">
+            <div className="w-5 h-5 bg-blue-500 rounded-full mx-auto" />
+          </button>
+          <button onClick={() => addShape('line')} className="p-3 bg-gray-50 hover:bg-blue-50 rounded border border-gray-200">
+            <div className="w-6 h-0.5 bg-blue-500 mx-auto" />
+          </button>
+        </div>
 
-        {/* Canvas Area */}
-        <div className="flex-1 flex items-center justify-center bg-gray-800 overflow-auto p-8">
+        {/* Image */}
+        <button
+          onClick={addImage}
+          className="w-full p-2 text-left text-sm bg-gray-50 hover:bg-blue-50 hover:text-blue-600 rounded border border-gray-200 transition-colors flex items-center gap-2"
+        >
+          <HiPhotograph className="w-4 h-4" />
+          Upload Image
+        </button>
+
+        {/* Layers */}
+        <h3 className="text-xs font-semibold text-gray-500 uppercase mt-6 mb-3">Layers ({layers.length})</h3>
+        <div className="space-y-1 max-h-48 overflow-y-auto">
+          {[...layers].reverse().map((layer, idx) => (
+            <div
+              key={layer.id}
+              onClick={() => {
+                const obj = canvas?.getObjects()[layers.length - 1 - idx];
+                if (obj && canvas) {
+                  canvas.setActiveObject(obj);
+                  canvas.renderAll();
+                }
+              }}
+              className={`p-2 text-xs rounded cursor-pointer truncate ${
+                activeObject === canvas?.getObjects()[layers.length - 1 - idx]
+                  ? 'bg-blue-100 text-blue-700'
+                  : 'bg-gray-50 hover:bg-gray-100'
+              }`}
+            >
+              {layer.name}
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Main Canvas Area */}
+      <div className="flex-1 flex flex-col min-w-0">
+        {/* Toolbar */}
+        <div className="h-12 bg-white border-b border-gray-200 px-4 flex items-center justify-between flex-shrink-0">
+          <div className="flex items-center gap-2">
+            {/* Zoom */}
+            <button onClick={() => handleZoom(-0.1)} className="p-1.5 hover:bg-gray-100 rounded">
+              <HiZoomOut className="w-4 h-4" />
+            </button>
+            <span className="text-sm w-14 text-center">{Math.round(zoom * 100)}%</span>
+            <button onClick={() => handleZoom(0.1)} className="p-1.5 hover:bg-gray-100 rounded">
+              <HiZoomIn className="w-4 h-4" />
+            </button>
+
+            <div className="w-px h-6 bg-gray-200 mx-2" />
+
+            {/* Object Actions */}
+            {activeObject && (
+              <>
+                <button onClick={duplicateObject} className="p-1.5 hover:bg-gray-100 rounded" title="Duplicate">
+                  <HiDuplicate className="w-4 h-4" />
+                </button>
+                <button onClick={deleteObject} className="p-1.5 hover:bg-red-100 text-red-600 rounded" title="Delete">
+                  <HiTrash className="w-4 h-4" />
+                </button>
+                <button onClick={bringForward} className="p-1.5 hover:bg-gray-100 rounded" title="Bring Forward">
+                  <HiArrowUp className="w-4 h-4" />
+                </button>
+                <button onClick={sendBackward} className="p-1.5 hover:bg-gray-100 rounded" title="Send Backward">
+                  <HiArrowDown className="w-4 h-4" />
+                </button>
+              </>
+            )}
+          </div>
+
+          <div className="flex items-center gap-2">
+            <button
+              onClick={handleSave}
+              className="px-3 py-1.5 bg-blue-600 text-white text-sm rounded hover:bg-blue-700 flex items-center gap-1"
+            >
+              <HiSave className="w-4 h-4" />
+              Save
+            </button>
+            <button
+              onClick={handleExport}
+              className="px-3 py-1.5 bg-gray-800 text-white text-sm rounded hover:bg-gray-900 flex items-center gap-1"
+            >
+              <HiDownload className="w-4 h-4" />
+              Export PNG
+            </button>
+          </div>
+        </div>
+
+        {/* Canvas Container */}
+        <div className="flex-1 overflow-auto p-8 bg-gray-200 flex items-start justify-center">
           <div
-            className="shadow-2xl"
-            style={{
-              transform: `scale(${zoom})`,
-              transformOrigin: 'center center',
-              transition: 'transform 0.2s ease',
-            }}
+            style={{ transform: `scale(${zoom})`, transformOrigin: 'top center' }}
+            className="shadow-xl"
           >
             <canvas ref={canvasRef} />
           </div>
         </div>
-
-        {/* Right Panel - Sidebar */}
-        <EditorSidebar
-          documentData={documentData}
-          selectedObject={selectedObject}
-          canvasObjects={canvasObjects}
-          onFieldChange={updateFieldValue}
-          onSelectObject={(id) => {
-            const canvas = fabricRef.current;
-            if (!canvas) return;
-            const obj = canvas.getObjects().find(o => o.id === id);
-            if (obj) {
-              canvas.setActiveObject(obj);
-              canvas.renderAll();
-            }
-          }}
-          onDeleteSelected={deleteSelected}
-          onDuplicateSelected={duplicateSelected}
-          onBringForward={bringForward}
-          onSendBackward={sendBackward}
-          onAddField={(fieldId, label) => {
-            setDocumentData(prev => ({
-              ...prev,
-              fields: {
-                ...prev.fields,
-                [fieldId]: { label, value: '', type: 'text' },
-              },
-            }));
-          }}
-        />
       </div>
 
-      {/* Template Gallery Modal */}
-      {showTemplates && (
-        <TemplateGallery
-          documentType={documentType}
-          onSelect={loadTemplate}
-          onClose={() => setShowTemplates(false)}
-        />
-      )}
+      {/* Right Sidebar - Properties */}
+      <div className="w-56 bg-white border-l border-gray-200 p-4 overflow-y-auto flex-shrink-0">
+        <h3 className="text-xs font-semibold text-gray-500 uppercase mb-3">Properties</h3>
+        
+        {activeObject ? (
+          <div className="space-y-4">
+            {/* Position */}
+            <div className="grid grid-cols-2 gap-2">
+              <div>
+                <label className="text-xs text-gray-500">X</label>
+                <input
+                  type="number"
+                  value={Math.round(activeObject.left || 0)}
+                  onChange={(e) => updateProperty('left', parseInt(e.target.value) || 0)}
+                  className="w-full px-2 py-1 border border-gray-200 rounded text-sm"
+                />
+              </div>
+              <div>
+                <label className="text-xs text-gray-500">Y</label>
+                <input
+                  type="number"
+                  value={Math.round(activeObject.top || 0)}
+                  onChange={(e) => updateProperty('top', parseInt(e.target.value) || 0)}
+                  className="w-full px-2 py-1 border border-gray-200 rounded text-sm"
+                />
+              </div>
+            </div>
 
-      {/* Loading Overlay */}
-      {isLoading && (
-        <div className="absolute inset-0 bg-gray-900/80 flex items-center justify-center z-50">
-          <div className="text-white text-xl">Loading editor...</div>
-        </div>
-      )}
+            {/* Rotation */}
+            <div>
+              <label className="text-xs text-gray-500">Rotation</label>
+              <input
+                type="range"
+                min="0"
+                max="360"
+                value={activeObject.angle || 0}
+                onChange={(e) => updateProperty('angle', parseInt(e.target.value))}
+                className="w-full"
+              />
+              <span className="text-xs text-gray-500">{Math.round(activeObject.angle || 0)}°</span>
+            </div>
+
+            {/* Color */}
+            {activeObject.fill !== undefined && activeObject.type !== 'line' && (
+              <div>
+                <label className="text-xs text-gray-500">Fill Color</label>
+                <input
+                  type="color"
+                  value={activeObject.fill || '#000000'}
+                  onChange={(e) => updateProperty('fill', e.target.value)}
+                  className="w-full h-8 rounded cursor-pointer"
+                />
+              </div>
+            )}
+
+            {/* Text Properties */}
+            {(activeObject.type === 'i-text' || activeObject.type === 'text') && (
+              <>
+                <div>
+                  <label className="text-xs text-gray-500">Font Size</label>
+                  <input
+                    type="number"
+                    value={activeObject.fontSize || 16}
+                    onChange={(e) => updateProperty('fontSize', parseInt(e.target.value) || 16)}
+                    className="w-full px-2 py-1 border border-gray-200 rounded text-sm"
+                  />
+                </div>
+                <div className="flex gap-1">
+                  <button
+                    onClick={() => updateProperty('fontWeight', activeObject.fontWeight === 'bold' ? 'normal' : 'bold')}
+                    className={`flex-1 p-1.5 rounded border text-sm ${activeObject.fontWeight === 'bold' ? 'bg-blue-100 border-blue-300' : 'border-gray-200'}`}
+                  >
+                    B
+                  </button>
+                  <button
+                    onClick={() => updateProperty('fontStyle', activeObject.fontStyle === 'italic' ? 'normal' : 'italic')}
+                    className={`flex-1 p-1.5 rounded border text-sm italic ${activeObject.fontStyle === 'italic' ? 'bg-blue-100 border-blue-300' : 'border-gray-200'}`}
+                  >
+                    I
+                  </button>
+                </div>
+              </>
+            )}
+
+            {/* Opacity */}
+            <div>
+              <label className="text-xs text-gray-500">Opacity</label>
+              <input
+                type="range"
+                min="0"
+                max="1"
+                step="0.1"
+                value={activeObject.opacity || 1}
+                onChange={(e) => updateProperty('opacity', parseFloat(e.target.value))}
+                className="w-full"
+              />
+            </div>
+          </div>
+        ) : (
+          <p className="text-sm text-gray-400 text-center py-8">
+            Select an element to edit
+          </p>
+        )}
+
+        {/* Template Info */}
+        {template && (
+          <div className="mt-6 pt-4 border-t border-gray-200">
+            <h3 className="text-xs font-semibold text-gray-500 uppercase mb-2">Template</h3>
+            <div className="flex items-center gap-2">
+              <div
+                className="w-8 h-8 rounded"
+                style={{
+                  background: `linear-gradient(135deg, ${template.colors?.primary} 0%, ${template.colors?.secondary} 100%)`,
+                }}
+              />
+              <div>
+                <p className="text-sm font-medium">{template.name}</p>
+                <p className="text-xs text-gray-500 capitalize">{template.style}</p>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
     </div>
   );
 };

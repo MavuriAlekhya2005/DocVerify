@@ -398,6 +398,258 @@ class BlockchainService {
   }
 
   /**
+   * Estimate gas for document registration
+   */
+  async estimateGasForRegistration(documentHash, documentId) {
+    if (!this.isAvailable()) {
+      return {
+        success: false,
+        message: 'Blockchain service not available',
+      };
+    }
+
+    try {
+      const formattedHash = documentHash.startsWith('0x') 
+        ? documentHash 
+        : '0x' + documentHash;
+
+      // Estimate gas
+      const gasEstimate = await this.contract.registerDocument.estimateGas(
+        formattedHash, 
+        documentId
+      );
+
+      // Get current gas price
+      const feeData = await this.provider.getFeeData();
+      const gasPrice = feeData.gasPrice;
+      const maxFeePerGas = feeData.maxFeePerGas;
+      const maxPriorityFeePerGas = feeData.maxPriorityFeePerGas;
+
+      // Calculate costs
+      const estimatedCost = gasEstimate * gasPrice;
+      const maxCost = gasEstimate * (maxFeePerGas || gasPrice);
+
+      return {
+        success: true,
+        gasEstimate: gasEstimate.toString(),
+        gasPrice: gasPrice.toString(),
+        maxFeePerGas: maxFeePerGas?.toString() || gasPrice.toString(),
+        maxPriorityFeePerGas: maxPriorityFeePerGas?.toString() || '0',
+        estimatedCost: ethers.formatEther(estimatedCost),
+        maxCost: ethers.formatEther(maxCost),
+        estimatedCostUSD: null, // Would need price feed
+        unit: 'ETH',
+      };
+    } catch (error) {
+      console.error('Gas estimation error:', error);
+      return {
+        success: false,
+        error: error.message,
+      };
+    }
+  }
+
+  /**
+   * Estimate gas for batch registration
+   */
+  async estimateGasForBatch(documentHashes, batchId) {
+    if (!this.isAvailable()) {
+      return {
+        success: false,
+        message: 'Blockchain service not available',
+      };
+    }
+
+    try {
+      const merkleRoot = this.buildMerkleRoot(documentHashes);
+      const batchIdHash = ethers.keccak256(ethers.toUtf8Bytes(batchId));
+
+      const gasEstimate = await this.contract.registerBatch.estimateGas(
+        merkleRoot,
+        documentHashes.length,
+        batchIdHash
+      );
+
+      const feeData = await this.provider.getFeeData();
+      const gasPrice = feeData.gasPrice;
+      const maxFeePerGas = feeData.maxFeePerGas;
+
+      const estimatedCost = gasEstimate * gasPrice;
+      const maxCost = gasEstimate * (maxFeePerGas || gasPrice);
+      const costPerDocument = estimatedCost / BigInt(documentHashes.length);
+
+      return {
+        success: true,
+        documentCount: documentHashes.length,
+        gasEstimate: gasEstimate.toString(),
+        gasPrice: gasPrice.toString(),
+        estimatedCost: ethers.formatEther(estimatedCost),
+        maxCost: ethers.formatEther(maxCost),
+        costPerDocument: ethers.formatEther(costPerDocument),
+        savings: documentHashes.length > 1 
+          ? `~${Math.round((1 - (1 / documentHashes.length)) * 100)}% vs individual`
+          : 'N/A',
+        unit: 'ETH',
+      };
+    } catch (error) {
+      console.error('Batch gas estimation error:', error);
+      return {
+        success: false,
+        error: error.message,
+      };
+    }
+  }
+
+  /**
+   * Estimate gas for document revocation
+   */
+  async estimateGasForRevocation(documentHash) {
+    if (!this.isAvailable()) {
+      return {
+        success: false,
+        message: 'Blockchain service not available',
+      };
+    }
+
+    try {
+      const formattedHash = documentHash.startsWith('0x') 
+        ? documentHash 
+        : '0x' + documentHash;
+
+      const gasEstimate = await this.contract.revokeDocument.estimateGas(formattedHash);
+      const feeData = await this.provider.getFeeData();
+      const gasPrice = feeData.gasPrice;
+
+      const estimatedCost = gasEstimate * gasPrice;
+
+      return {
+        success: true,
+        gasEstimate: gasEstimate.toString(),
+        gasPrice: gasPrice.toString(),
+        estimatedCost: ethers.formatEther(estimatedCost),
+        unit: 'ETH',
+      };
+    } catch (error) {
+      console.error('Revocation gas estimation error:', error);
+      return {
+        success: false,
+        error: error.message,
+      };
+    }
+  }
+
+  /**
+   * Get current network gas prices
+   */
+  async getGasPrices() {
+    if (!this.isAvailable()) {
+      return {
+        success: false,
+        message: 'Blockchain service not available',
+      };
+    }
+
+    try {
+      const feeData = await this.provider.getFeeData();
+      const block = await this.provider.getBlock('latest');
+
+      return {
+        success: true,
+        gasPrice: ethers.formatUnits(feeData.gasPrice, 'gwei'),
+        maxFeePerGas: feeData.maxFeePerGas 
+          ? ethers.formatUnits(feeData.maxFeePerGas, 'gwei')
+          : null,
+        maxPriorityFeePerGas: feeData.maxPriorityFeePerGas
+          ? ethers.formatUnits(feeData.maxPriorityFeePerGas, 'gwei')
+          : null,
+        baseFee: block.baseFeePerGas
+          ? ethers.formatUnits(block.baseFeePerGas, 'gwei')
+          : null,
+        unit: 'gwei',
+        blockNumber: block.number,
+        timestamp: new Date(block.timestamp * 1000).toISOString(),
+      };
+    } catch (error) {
+      console.error('Gas price fetch error:', error);
+      return {
+        success: false,
+        error: error.message,
+      };
+    }
+  }
+
+  /**
+   * Get wallet balance
+   */
+  async getWalletBalance() {
+    if (!this.isAvailable()) {
+      return {
+        success: false,
+        message: 'Blockchain service not available',
+      };
+    }
+
+    try {
+      const address = await this.wallet.getAddress();
+      const balance = await this.provider.getBalance(address);
+
+      return {
+        success: true,
+        address,
+        balance: ethers.formatEther(balance),
+        balanceWei: balance.toString(),
+        unit: 'ETH',
+      };
+    } catch (error) {
+      console.error('Balance fetch error:', error);
+      return {
+        success: false,
+        error: error.message,
+      };
+    }
+  }
+
+  /**
+   * Get comprehensive gas estimation report
+   */
+  async getGasEstimationReport(operation, params = {}) {
+    const gasPrices = await this.getGasPrices();
+    let operationEstimate;
+
+    switch (operation) {
+      case 'register':
+        operationEstimate = await this.estimateGasForRegistration(
+          params.documentHash || '0x' + '0'.repeat(64),
+          params.documentId || 'TEST-DOC-ID'
+        );
+        break;
+      case 'batch':
+        operationEstimate = await this.estimateGasForBatch(
+          params.documentHashes || ['0x' + '0'.repeat(64)],
+          params.batchId || 'TEST-BATCH-ID'
+        );
+        break;
+      case 'revoke':
+        operationEstimate = await this.estimateGasForRevocation(
+          params.documentHash || '0x' + '0'.repeat(64)
+        );
+        break;
+      default:
+        operationEstimate = { success: false, message: 'Unknown operation' };
+    }
+
+    const walletBalance = await this.getWalletBalance();
+
+    return {
+      operation,
+      gasPrices,
+      operationEstimate,
+      walletBalance,
+      timestamp: new Date().toISOString(),
+    };
+  }
+
+  /**
    * Get contract statistics
    */
   async getStats() {

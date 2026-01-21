@@ -197,6 +197,16 @@ export const api = {
     return response.json();
   },
 
+  // Save WYSIWYG document (any user)
+  saveWYSIWYGDocument: async (data) => {
+    const response = await fetch(`${API_URL}/documents/wysiwyg`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
+      body: JSON.stringify(data),
+    });
+    return response.json();
+  },
+
   // Get user's issued documents
   getIssuedDocuments: async () => {
     const response = await fetch(`${API_URL}/documents/issued`, {
@@ -343,6 +353,137 @@ export const api = {
   // Get blockchain transaction details
   getBlockchainTransaction: async (documentId) => {
     const response = await fetch(`${API_URL}/blockchain/transaction/${documentId}`, {
+      headers: getAuthHeaders(),
+    });
+    return response.json();
+  },
+
+  // ==================== AI SERVICES ====================
+
+  // Extract fields from document using AI
+  aiExtract: async (text, documentType = null, filePath = null) => {
+    const response = await fetch(`${API_URL}/ai/extract`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
+      body: JSON.stringify({ text, documentType, filePath }),
+    });
+    return response.json();
+  },
+
+  // Get AI suggestions for field value
+  aiSuggest: async (fieldName, partialValue, context = {}) => {
+    const response = await fetch(`${API_URL}/ai/suggest`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
+      body: JSON.stringify({ fieldName, partialValue, context }),
+    });
+    return response.json();
+  },
+
+  // Validate and enhance extracted data
+  aiValidate: async (fields, documentType) => {
+    const response = await fetch(`${API_URL}/ai/validate`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
+      body: JSON.stringify({ fields, documentType }),
+    });
+    return response.json();
+  },
+
+  // Get supported document types
+  getDocumentTypes: async () => {
+    const response = await fetch(`${API_URL}/ai/document-types`, {
+      headers: getAuthHeaders(),
+    });
+    return response.json();
+  },
+
+  // Get recommended fields for document type
+  getRecommendedFields: async (documentType) => {
+    const response = await fetch(`${API_URL}/ai/fields/${documentType}`, {
+      headers: getAuthHeaders(),
+    });
+    return response.json();
+  },
+
+  // Generate document summary
+  generateSummary: async (text, documentType) => {
+    const response = await fetch(`${API_URL}/ai/summary`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
+      body: JSON.stringify({ text, documentType }),
+    });
+    return response.json();
+  },
+
+  // Get AI service status
+  getAIStatus: async () => {
+    const response = await fetch(`${API_URL}/ai/status`, {
+      headers: getAuthHeaders(),
+    });
+    return response.json();
+  },
+
+  // ==================== GAS ESTIMATION ====================
+
+  // Get current gas prices
+  getGasPrices: async () => {
+    const response = await fetch(`${API_URL}/blockchain/gas/prices`, {
+      headers: getAuthHeaders(),
+    });
+    return response.json();
+  },
+
+  // Estimate gas for operation
+  estimateGas: async (operation, params = {}) => {
+    const response = await fetch(`${API_URL}/blockchain/gas/estimate`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
+      body: JSON.stringify({ operation, ...params }),
+    });
+    return response.json();
+  },
+
+  // Get wallet balance
+  getWalletBalance: async () => {
+    const response = await fetch(`${API_URL}/blockchain/wallet`, {
+      headers: getAuthHeaders(),
+    });
+    return response.json();
+  },
+
+  // ==================== ANALYTICS ====================
+
+  // Get detailed analytics (admin)
+  getDetailedAnalytics: async () => {
+    const response = await fetch(`${API_URL}/analytics/detailed`, {
+      headers: getAuthHeaders(),
+    });
+    return response.json();
+  },
+
+  // Get realtime analytics (admin)
+  getRealtimeAnalytics: async () => {
+    const response = await fetch(`${API_URL}/analytics/realtime`, {
+      headers: getAuthHeaders(),
+    });
+    return response.json();
+  },
+
+  // ==================== CACHE ====================
+
+  // Get cache stats (admin)
+  getCacheStats: async () => {
+    const response = await fetch(`${API_URL}/cache/stats`, {
+      headers: getAuthHeaders(),
+    });
+    return response.json();
+  },
+
+  // Invalidate cache entry (admin)
+  invalidateCache: async (type, id) => {
+    const response = await fetch(`${API_URL}/cache/invalidate/${type}/${id}`, {
+      method: 'DELETE',
       headers: getAuthHeaders(),
     });
     return response.json();
