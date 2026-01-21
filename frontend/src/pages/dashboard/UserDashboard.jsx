@@ -11,7 +11,8 @@ import {
   HiBell,
   HiSearch,
   HiDocumentAdd,
-  HiCollection
+  HiCollection,
+  HiPencilAlt
 } from 'react-icons/hi';
 import Logo from '../../components/Logo';
 import PortalSwitcher from '../../components/PortalSwitcher';
@@ -29,6 +30,7 @@ const UserDashboard = () => {
 
   const menuItems = [
     { name: 'Dashboard', icon: HiHome, path: '/dashboard' },
+    { name: 'Create Document', icon: HiPencilAlt, path: '/dashboard/create' },
     { name: 'Issue Document', icon: HiDocumentAdd, path: '/dashboard/issue' },
     { name: 'Bulk Issue', icon: HiCollection, path: '/dashboard/bulk-issue' },
     { name: 'Upload Document', icon: HiUpload, path: '/dashboard/upload' },

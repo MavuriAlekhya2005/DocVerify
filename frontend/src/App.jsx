@@ -23,6 +23,7 @@ import MyCertificates from './pages/dashboard/user/MyCertificates';
 import CertificateDetails from './pages/dashboard/user/CertificateDetails';
 import IssueDocument from './pages/dashboard/user/IssueDocument';
 import BulkIssueDocument from './pages/dashboard/user/BulkIssueDocument';
+import CreateDocument from './pages/dashboard/user/CreateDocument';
 
 // Admin Dashboard Sub-pages
 import BulkIssuance from './pages/dashboard/admin/BulkIssuance';
@@ -85,10 +86,12 @@ function App() {
         }>
           <Route index element={<MyCertificates />} />
           <Route path="issue" element={<IssueDocument />} />
+          <Route path="create" element={<CreateDocument />} />
           <Route path="bulk-issue" element={<BulkIssueDocument />} />
           <Route path="upload" element={<UploadCertificate />} />
           <Route path="certificates" element={<MyCertificates />} />
           <Route path="certificates/:id" element={<CertificateDetails />} />
+          <Route path="documents/:id" element={<CertificateDetails />} />
           <Route path="settings" element={<Settings userRole="user" />} />
         </Route>
         

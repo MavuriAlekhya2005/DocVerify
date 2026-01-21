@@ -1,15 +1,22 @@
 {
   "name": "docverify",
   "version": "1.0.0",
-  "description": "DocVerify - Certificate Verification System",
+  "description": "DocVerify - Blockchain-based Document Verification System",
   "scripts": {
-    "start": "concurrently \"npm run backend\" \"npm run frontend\"",
-    "dev": "concurrently -n \"backend,frontend\" -c \"yellow,cyan\" \"npm run backend\" \"npm run frontend\"",
-    "backend": "cd backend && node server.js",
-    "frontend": "cd frontend && npm run dev",
-    "install:all": "npm install && cd backend && npm install && cd ../frontend && npm install"
+    "dev": "concurrently -n \"CHAIN,API,WEB\" -c \"yellow,cyan,magenta\" \"npm run dev:blockchain\" \"npm run dev:backend\" \"npm run dev:frontend\"",
+    "dev:blockchain": "cd blockchain && npx hardhat node",
+    "dev:backend": "node backend/auto-deploy.js && cd backend && node server.js",
+    "dev:frontend": "cd frontend && npm run dev",
+    "start": "npm run dev",
+    "deploy": "cd blockchain && npx hardhat run scripts/deploy.js --network localhost",
+    "test": "cd blockchain && npx hardhat test",
+    "build": "cd frontend && npm run build",
+    "install:all": "npm install && cd blockchain && npm install && cd ../backend && npm install && cd ../frontend && npm install"
   },
   "devDependencies": {
     "concurrently": "^8.2.2"
+  },
+  "engines": {
+    "node": ">=18.0.0"
   }
 }

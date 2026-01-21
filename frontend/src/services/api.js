@@ -291,6 +291,62 @@ export const api = {
     });
     return response.json();
   },
+
+  // ==================== WYSIWYG DOCUMENTS ====================
+
+  // Create document from WYSIWYG editor
+  createWYSIWYGDocument: async (data) => {
+    const response = await fetch(`${API_URL}/documents/wysiwyg`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
+      body: JSON.stringify(data),
+    });
+    return response.json();
+  },
+
+  // Update WYSIWYG document
+  updateWYSIWYGDocument: async (documentId, data) => {
+    const response = await fetch(`${API_URL}/documents/wysiwyg/${documentId}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
+      body: JSON.stringify(data),
+    });
+    return response.json();
+  },
+
+  // Get WYSIWYG document for editing
+  getWYSIWYGDocument: async (documentId) => {
+    const response = await fetch(`${API_URL}/documents/wysiwyg/${documentId}`, {
+      headers: getAuthHeaders(),
+    });
+    return response.json();
+  },
+
+  // ==================== BLOCKCHAIN ====================
+
+  // Get blockchain status
+  getBlockchainStatus: async () => {
+    const response = await fetch(`${API_URL}/blockchain/status`, {
+      headers: getAuthHeaders(),
+    });
+    return response.json();
+  },
+
+  // Verify document on blockchain
+  verifyOnBlockchain: async (documentId) => {
+    const response = await fetch(`${API_URL}/blockchain/verify/${documentId}`, {
+      headers: getAuthHeaders(),
+    });
+    return response.json();
+  },
+
+  // Get blockchain transaction details
+  getBlockchainTransaction: async (documentId) => {
+    const response = await fetch(`${API_URL}/blockchain/transaction/${documentId}`, {
+      headers: getAuthHeaders(),
+    });
+    return response.json();
+  },
 };
 
 export default api;

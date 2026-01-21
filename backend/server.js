@@ -15,6 +15,7 @@ const OTP = require('./models/OTP');
 const { extractDocumentData, validateIntegrity } = require('./services/documentExtractor');
 const { generateOTP, sendOTPEmail } = require('./services/emailService');
 const { uploadBase64ToCloudinary, uploadFileToCloudinary, isCloudinaryConfigured, deleteFromCloudinary } = require('./services/cloudinaryService');
+const blockchainService = require('./services/blockchainService');
 
 const app = express();
 
@@ -1684,8 +1685,8 @@ app.post('/api/auth/disconnect/:provider', authenticateToken, async (req, res) =
 app.get('/', (req, res) => {
   res.json({
     success: true,
-    message: 'DocVerify API - Document Verification with AI Extraction',
-    version: '2.0.0',
+    message: 'DocVerify API - Document Verification with AI Extraction & Blockchain',
+    version: '3.0.0',
     endpoints: {
       upload: 'POST /api/upload - Upload & extract document data',
       certificates: 'GET /api/certificates - List all certificates',
@@ -1693,6 +1694,8 @@ app.get('/', (req, res) => {
       verify: 'POST /api/verify - Verify with tiered access (partial/full)',
       quickVerify: 'GET /api/verify/quick/:id - Quick verification (primary details)',
       download: 'GET /api/download/:id?accessKey=KEY - Download document (full access)',
+      wysiwyg: 'POST /api/documents/wysiwyg - Create document from WYSIWYG editor',
+      blockchain: 'GET /api/blockchain/status - Blockchain service status',
       health: 'GET /api/health',
     },
     accessLevels: {
@@ -1700,7 +1703,254 @@ app.get('/', (req, res) => {
       partial: 'Verification summary without access key',
       full: 'Complete details + download with access key',
     },
+    blockchain: {
+      enabled: blockchainService.isAvailable(),
+      network: 'Hardhat Local / Polygon Amoy',
+    },
   });
+});
+
+// ==================== WYSIWYG DOCUMENT ROUTES ====================
+
+// POST /api/documents/wysiwyg - Create document from WYSIWYG editor
+app.post('/api/documents/wysiwyg', authenticateToken, async (req, res) => {
+  try {
+    const { documentId, documentType, canvasData, fields, accessKey } = req.body;
+    
+    if (!documentId || !canvasData) {
+      return res.status(400).json({ 
+        success: false, 
+        message: 'Document ID and canvas data are required' 
+      });
+    }
+    
+    // Generate document hash from canvas data
+    const documentHash = crypto.createHash('sha256')
+      .update(JSON.stringify(canvasData))
+      .digest('hex');
+    
+    // Generate QR code
+    const verifyUrl = `${process.env.FRONTEND_URL || 'http://localhost:5173'}/verify/${documentId}`;
+    const qrData = JSON.stringify({ 
+      documentId, 
+      type: documentType,
+      url: verifyUrl
+    });
+    const qrCode = await QRCode.toDataURL(qrData, { width: 300, margin: 2 });
+    
+    // Determine title from fields
+    let title = 'Untitled Document';
+    if (fields?.recipientName?.value) {
+      title = `Certificate - ${fields.recipientName.value}`;
+    } else if (fields?.courseName?.value) {
+      title = fields.courseName.value;
+    }
+    
+    // Create certificate record
+    const certificate = await Certificate.create({
+      certificateId: documentId,
+      title,
+      documentHash,
+      accessKey: accessKey || crypto.randomBytes(6).toString('hex').toUpperCase(),
+      qrCode,
+      originalFilename: `${documentId}.json`,
+      fileType: 'application/json',
+      extractionStatus: 'completed',
+      issuedBy: req.user.id,
+      primaryDetails: {
+        documentType: documentType || 'certificate',
+        fields: Object.fromEntries(
+          Object.entries(fields || {}).map(([k, v]) => [k, v.value || ''])
+        ),
+        hash: documentHash,
+        extractedAt: new Date(),
+        confidenceScore: 100,
+      },
+      fullDetails: {
+        rawText: JSON.stringify(fields),
+        structuredData: new Map(
+          Object.entries(fields || {}).map(([k, v]) => [k, v.value || ''])
+        ),
+        canvasData: canvasData,
+        dates: [],
+        signatures: [],
+        hash: documentHash,
+        extractionMetadata: { 
+          source: 'wysiwyg',
+          editor: 'fabric.js',
+        },
+      },
+      verificationSummary: {
+        documentType: documentType || 'certificate',
+        holderName: fields?.recipientName?.value || 'Not specified',
+        documentNumber: documentId,
+        issueDate: fields?.issueDate?.value || new Date().toISOString().split('T')[0],
+        issuingAuthority: req.user.email,
+        confidenceScore: 100,
+        integrityHash: documentHash,
+      },
+    });
+    
+    // Register on blockchain if available
+    let blockchainResult = null;
+    if (blockchainService.isAvailable()) {
+      try {
+        blockchainResult = await blockchainService.registerDocument(
+          '0x' + documentHash,
+          documentId
+        );
+        console.log('Document registered on blockchain:', blockchainResult);
+      } catch (blockchainError) {
+        console.error('Blockchain registration failed:', blockchainError.message);
+        // Don't fail the request, just log the error
+      }
+    }
+    
+    res.status(201).json({
+      success: true,
+      message: 'Document created successfully',
+      data: {
+        documentId: certificate.certificateId,
+        accessKey: certificate.accessKey,
+        documentHash: certificate.documentHash,
+        qrCode: certificate.qrCode,
+        title: certificate.title,
+        verifyUrl,
+        createdAt: certificate.createdAt,
+        blockchain: blockchainResult,
+      }
+    });
+  } catch (error) {
+    console.error('Create WYSIWYG document error:', error);
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+// GET /api/documents/wysiwyg/:id - Get WYSIWYG document for editing
+app.get('/api/documents/wysiwyg/:id', authenticateToken, async (req, res) => {
+  try {
+    const certificate = await Certificate.findOne({ 
+      certificateId: req.params.id,
+      issuedBy: req.user.id 
+    });
+    
+    if (!certificate) {
+      return res.status(404).json({ success: false, message: 'Document not found' });
+    }
+    
+    res.json({
+      success: true,
+      data: {
+        documentId: certificate.certificateId,
+        documentType: certificate.primaryDetails?.documentType,
+        canvasData: certificate.fullDetails?.canvasData,
+        fields: certificate.primaryDetails?.fields,
+        title: certificate.title,
+        createdAt: certificate.createdAt,
+        updatedAt: certificate.updatedAt,
+      }
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+// PUT /api/documents/wysiwyg/:id - Update WYSIWYG document
+app.put('/api/documents/wysiwyg/:id', authenticateToken, async (req, res) => {
+  try {
+    const { canvasData, fields } = req.body;
+    
+    const certificate = await Certificate.findOne({ 
+      certificateId: req.params.id,
+      issuedBy: req.user.id 
+    });
+    
+    if (!certificate) {
+      return res.status(404).json({ success: false, message: 'Document not found' });
+    }
+    
+    // Update document hash
+    const newDocumentHash = crypto.createHash('sha256')
+      .update(JSON.stringify(canvasData))
+      .digest('hex');
+    
+    // Update certificate
+    certificate.documentHash = newDocumentHash;
+    certificate.fullDetails.canvasData = canvasData;
+    certificate.primaryDetails.fields = Object.fromEntries(
+      Object.entries(fields || {}).map(([k, v]) => [k, v.value || ''])
+    );
+    certificate.primaryDetails.hash = newDocumentHash;
+    certificate.fullDetails.hash = newDocumentHash;
+    certificate.verificationSummary.integrityHash = newDocumentHash;
+    certificate.updatedAt = new Date();
+    
+    await certificate.save();
+    
+    res.json({
+      success: true,
+      message: 'Document updated successfully',
+      data: {
+        documentId: certificate.certificateId,
+        documentHash: certificate.documentHash,
+        updatedAt: certificate.updatedAt,
+      }
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+// ==================== BLOCKCHAIN ROUTES ====================
+
+// GET /api/blockchain/status - Get blockchain service status
+app.get('/api/blockchain/status', async (req, res) => {
+  try {
+    const stats = await blockchainService.getStats();
+    res.json({
+      success: true,
+      data: stats,
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+// GET /api/blockchain/verify/:id - Verify document on blockchain
+app.get('/api/blockchain/verify/:id', async (req, res) => {
+  try {
+    const result = await blockchainService.verifyByDocumentId(req.params.id);
+    res.json({
+      success: true,
+      data: result,
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+// GET /api/blockchain/transaction/:id - Get blockchain transaction for document
+app.get('/api/blockchain/transaction/:id', async (req, res) => {
+  try {
+    // Get certificate to find document hash
+    const certificate = await Certificate.findOne({ certificateId: req.params.id });
+    
+    if (!certificate) {
+      return res.status(404).json({ success: false, message: 'Document not found' });
+    }
+    
+    const result = await blockchainService.verifyDocument('0x' + certificate.documentHash);
+    res.json({
+      success: true,
+      data: {
+        documentId: certificate.certificateId,
+        documentHash: certificate.documentHash,
+        blockchain: result,
+      },
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
 });
 
 const PORT = process.env.PORT || 5000;
