@@ -15,12 +15,17 @@ import {
   HiCamera,
   HiTrash,
   HiExclamation,
+  HiMoon,
+  HiSun,
+  HiDesktopComputer,
 } from 'react-icons/hi';
 import { FaGithub, FaGoogle } from 'react-icons/fa';
 import toast from 'react-hot-toast';
 import api from '../../services/api';
+import { useTheme, THEMES } from '../../contexts/ThemeContext';
 
 const Settings = ({ userRole = 'user' }) => {
+  const { theme, setTheme, resolvedTheme } = useTheme();
   const [activeTab, setActiveTab] = useState('profile');
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
@@ -54,7 +59,6 @@ const Settings = ({ userRole = 'user' }) => {
   });
 
   const [appearance, setAppearance] = useState({
-    theme: 'dark',
     language: 'en',
     dateFormat: 'MM/DD/YYYY',
   });
@@ -456,21 +460,34 @@ const Settings = ({ userRole = 'user' }) => {
                 <div>
                   <label className="block text-sm font-medium text-gray-300 mb-3">Theme</label>
                   <div className="grid grid-cols-3 gap-4">
-                    {['dark', 'light', 'system'].map((theme) => (
-                      <button
-                        key={theme}
-                        onClick={() => setAppearance({ ...appearance, theme })}
-                        className={`p-4 rounded-xl border-2 transition-all capitalize ${
-                          appearance.theme === theme
-                            ? 'border-primary-500 bg-primary-500/10'
-                            : 'border-white/10 bg-dark-300 hover:border-white/30'
-                        }`}
-                      >
-                        <HiColorSwatch className={`w-8 h-8 mx-auto mb-2 ${appearance.theme === theme ? 'text-primary-400' : 'text-gray-400'}`} />
-                        <span className={appearance.theme === theme ? 'text-primary-400' : 'text-gray-400'}>{theme}</span>
-                      </button>
-                    ))}
+                    {[
+                      { value: THEMES.DARK, label: 'Dark', icon: HiMoon },
+                      { value: THEMES.LIGHT, label: 'Light', icon: HiSun },
+                      { value: THEMES.SYSTEM, label: 'System', icon: HiDesktopComputer },
+                    ].map((option) => {
+                      const Icon = option.icon;
+                      return (
+                        <button
+                          key={option.value}
+                          onClick={() => {
+                            setTheme(option.value);
+                            toast.success(`Theme changed to ${option.label}`);
+                          }}
+                          className={`p-4 rounded-xl border-2 transition-all capitalize ${
+                            theme === option.value
+                              ? 'border-primary-500 bg-primary-500/10'
+                              : 'border-white/10 bg-dark-300 hover:border-white/30'
+                          }`}
+                        >
+                          <Icon className={`w-8 h-8 mx-auto mb-2 ${theme === option.value ? 'text-primary-400' : 'text-gray-400'}`} />
+                          <span className={theme === option.value ? 'text-primary-400' : 'text-gray-400'}>{option.label}</span>
+                        </button>
+                      );
+                    })}
                   </div>
+                  <p className="text-gray-500 text-sm mt-2">
+                    Current resolved theme: <span className="text-white capitalize">{resolvedTheme}</span>
+                  </p>
                 </div>
 
                 <div>

@@ -15,6 +15,8 @@ import {
 } from 'react-icons/hi';
 import Logo from '../../components/Logo';
 import PortalSwitcher from '../../components/PortalSwitcher';
+import ThemeToggle from '../../components/ThemeToggle';
+import Breadcrumb from '../../components/Breadcrumb';
 import api from '../../services/api';
 
 const AdminDashboard = () => {
@@ -157,6 +159,7 @@ const AdminDashboard = () => {
             </div>
 
             <div className="flex items-center gap-4">
+              <ThemeToggle />
               <button className="relative text-gray-400 hover:text-white p-2 rounded-xl hover:bg-white/5">
                 <HiBell className="w-6 h-6" />
               </button>
@@ -177,6 +180,7 @@ const AdminDashboard = () => {
 
         {/* Page Content */}
         <main className="flex-1 p-6 overflow-y-auto">
+          <Breadcrumb />
           <Outlet />
         </main>
       </div>

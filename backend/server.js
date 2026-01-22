@@ -9,6 +9,44 @@ const fs = require('fs');
 const { v4: uuidv4 } = require('uuid');
 const QRCode = require('qrcode');
 const jwt = require('jsonwebtoken');
+
+// Rate limiting for security
+const rateLimit = (maxRequests = 100, windowMs = 60 * 1000) => {
+  const requests = new Map();
+  
+  return (req, res, next) => {
+    const ip = req.ip || req.connection.remoteAddress;
+    const now = Date.now();
+    
+    if (!requests.has(ip)) {
+      requests.set(ip, { count: 1, startTime: now });
+    } else {
+      const ipData = requests.get(ip);
+      if (now - ipData.startTime > windowMs) {
+        requests.set(ip, { count: 1, startTime: now });
+      } else if (ipData.count >= maxRequests) {
+        return res.status(429).json({
+          success: false,
+          message: 'Too many requests. Please try again later.',
+        });
+      } else {
+        ipData.count++;
+      }
+    }
+    
+    // Cleanup old entries periodically
+    if (Math.random() < 0.01) {
+      for (const [key, value] of requests.entries()) {
+        if (now - value.startTime > windowMs * 2) {
+          requests.delete(key);
+        }
+      }
+    }
+    
+    next();
+  };
+};
+
 const Certificate = require('./models/Certificate');
 const User = require('./models/User');
 const OTP = require('./models/OTP');
@@ -59,8 +97,17 @@ const upload = multer({
 });
 
 // Middleware
-app.use(cors());
-app.use(express.json());
+// CORS configuration - restrict origins in production
+const corsOptions = {
+  origin: process.env.NODE_ENV === 'production' 
+    ? process.env.ALLOWED_ORIGINS?.split(',') || ['https://yourdomain.com']
+    : true, // Allow all origins in development
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization'],
+};
+app.use(cors(corsOptions));
+app.use(express.json({ limit: '10mb' }));
 app.use('/uploads', express.static(uploadsDir));
 
 // Helper: Generate JWT token
@@ -104,8 +151,11 @@ const generateHash = (filePath) => {
 
 // ==================== OTP ROUTES ====================
 
+// Rate limiter for OTP routes (stricter limits)
+const otpRateLimit = rateLimit(5, 60 * 1000); // 5 requests per minute
+
 // POST /api/otp/send - Send OTP to email
-app.post('/api/otp/send', async (req, res) => {
+app.post('/api/otp/send', otpRateLimit, async (req, res) => {
   try {
     const { email, purpose = 'registration' } = req.body;
 
@@ -243,8 +293,11 @@ app.post('/api/otp/verify', async (req, res) => {
 
 // ==================== AUTH ROUTES ====================
 
+// Rate limiter for auth routes (login/register)
+const authRateLimit = rateLimit(10, 60 * 1000); // 10 requests per minute
+
 // POST /api/auth/register - Register new user (with OTP verification)
-app.post('/api/auth/register', async (req, res) => {
+app.post('/api/auth/register', authRateLimit, async (req, res) => {
   try {
     const { name, email, password, role, organization, otp } = req.body;
 
@@ -321,7 +374,7 @@ app.post('/api/auth/register', async (req, res) => {
 });
 
 // POST /api/auth/login - Login user
-app.post('/api/auth/login', async (req, res) => {
+app.post('/api/auth/login', authRateLimit, async (req, res) => {
   try {
     const { email, password } = req.body;
 
@@ -865,7 +918,7 @@ app.post('/api/upload', upload.single('document'), async (req, res) => {
 app.get('/api/certificates', async (req, res) => {
   try {
     const certificates = await Certificate.find()
-      .select('-qrCode -filePath')
+      .select('-filePath') // Keep qrCode and previewUrl for display
       .sort({ createdAt: -1 });
     res.json({ success: true, data: certificates });
   } catch (error) {
@@ -1974,7 +2027,7 @@ app.post('/api/documents/bulk-issue', authenticateToken, async (req, res) => {
 // POST /api/documents/wysiwyg - Save a WYSIWYG document created in the editor
 app.post('/api/documents/wysiwyg', authenticateToken, async (req, res) => {
   try {
-    const { canvasData, preview, documentType, templateId, templateName } = req.body;
+    const { documentId: providedDocId, canvasData, preview, documentType, templateId, templateName, codeType } = req.body;
     
     // Validate required fields
     if (!canvasData || !preview) {
@@ -1984,8 +2037,8 @@ app.post('/api/documents/wysiwyg', authenticateToken, async (req, res) => {
       });
     }
     
-    // Generate unique IDs
-    const documentId = generateCertificateId();
+    // Use provided documentId or generate new one
+    const documentId = providedDocId || generateCertificateId();
     const accessKey = generateAccessKey();
     
     // Generate document hash from canvas data

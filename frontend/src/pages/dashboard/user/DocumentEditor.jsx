@@ -1,18 +1,26 @@
 /**
  * Document Editor Page - Standalone WYSIWYG Editor Window
  * Reads template data from localStorage
+ * Generates Document ID upfront for QR/Barcode embedding
  */
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { toast, Toaster } from 'react-hot-toast';
-import { HiX, HiSave, HiDownload, HiCheckCircle } from 'react-icons/hi';
+import { HiX, HiSave, HiDownload, HiCheckCircle, HiClipboardCopy } from 'react-icons/hi';
+import { v4 as uuidv4 } from 'uuid';
 import WYSIWYGEditor from '../../../components/wysiwyg/WYSIWYGEditor';
 import api from '../../../services/api';
+
+// Generate document ID in the same format as backend
+const generateDocumentId = () => `DOC-${uuidv4().split('-')[0].toUpperCase()}`;
 
 const DocumentEditor = () => {
   const [templateData, setTemplateData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [savedDocument, setSavedDocument] = useState(null);
+  
+  // Generate document ID once when component mounts
+  const documentId = useMemo(() => generateDocumentId(), []);
 
   useEffect(() => {
     // Read from localStorage
@@ -36,13 +44,15 @@ const DocumentEditor = () => {
     try {
       const { documentType, template } = templateData;
       
-      // Call backend API to save the document
+      // Call backend API to save the document with pre-generated ID
       const result = await api.saveWYSIWYGDocument({
+        documentId,
         canvasData: payload.canvasData,
         preview: payload.preview,
         documentType: documentType,
         templateId: template?.id || 'custom',
         templateName: template?.name || 'Custom Document',
+        codeType: payload.codeType || 'qr',
       });
       
       if (result.success) {
@@ -65,7 +75,7 @@ const DocumentEditor = () => {
   const handleExport = (format, dataUrl) => {
     if (format === 'png' && dataUrl) {
       const link = document.createElement('a');
-      link.download = `document-${Date.now()}.png`;
+      link.download = `${documentId}.png`;
       link.href = dataUrl;
       link.click();
       toast.success('Document exported as PNG');
@@ -79,9 +89,9 @@ const DocumentEditor = () => {
     }
   };
 
-  const handleCreateAnother = () => {
-    setSavedDocument(null);
-    // User can go back and create another document
+  const copyToClipboard = (text, label) => {
+    navigator.clipboard.writeText(text);
+    toast.success(`${label} copied to clipboard`);
   };
 
   if (loading) {
@@ -121,14 +131,30 @@ const DocumentEditor = () => {
           <h2 className="text-2xl font-bold text-white mb-2">Document Saved!</h2>
           <p className="text-gray-400 mb-6">Your document has been created and saved successfully.</p>
           
-          <div className="bg-gray-700/50 rounded-xl p-4 mb-6 text-left">
-            <div className="flex justify-between items-center mb-2">
+          <div className="bg-gray-700/50 rounded-xl p-4 mb-6 text-left space-y-3">
+            <div className="flex justify-between items-center">
               <span className="text-gray-400 text-sm">Document ID</span>
-              <span className="text-white font-mono text-sm">{savedDocument.documentId}</span>
+              <div className="flex items-center gap-2">
+                <span className="text-white font-mono text-sm">{savedDocument.documentId}</span>
+                <button 
+                  onClick={() => copyToClipboard(savedDocument.documentId, 'Document ID')}
+                  className="text-gray-400 hover:text-white"
+                >
+                  <HiClipboardCopy className="w-4 h-4" />
+                </button>
+              </div>
             </div>
-            <div className="flex justify-between items-center mb-2">
+            <div className="flex justify-between items-center">
               <span className="text-gray-400 text-sm">Access Key</span>
-              <span className="text-white font-mono text-sm">{savedDocument.accessKey}</span>
+              <div className="flex items-center gap-2">
+                <span className="text-white font-mono text-sm">{savedDocument.accessKey}</span>
+                <button 
+                  onClick={() => copyToClipboard(savedDocument.accessKey, 'Access Key')}
+                  className="text-gray-400 hover:text-white"
+                >
+                  <HiClipboardCopy className="w-4 h-4" />
+                </button>
+              </div>
             </div>
             <div className="flex justify-between items-center">
               <span className="text-gray-400 text-sm">Verify URL</span>
@@ -138,7 +164,7 @@ const DocumentEditor = () => {
                 rel="noopener noreferrer"
                 className="text-blue-400 text-sm hover:underline truncate max-w-[180px]"
               >
-                {savedDocument.verifyUrl}
+                Open Link
               </a>
             </div>
           </div>
@@ -149,7 +175,7 @@ const DocumentEditor = () => {
               <img 
                 src={savedDocument.qrCode} 
                 alt="QR Code" 
-                className="w-32 h-32 mx-auto rounded-lg"
+                className="w-32 h-32 mx-auto rounded-lg bg-white p-2"
               />
               <p className="text-xs text-gray-500 mt-2">Scan to verify document</p>
             </div>
@@ -194,7 +220,7 @@ const DocumentEditor = () => {
               {template?.name || 'New Document'}
             </h1>
             <p className="text-xs text-gray-500 capitalize">
-              {documentType?.replace('_', ' ')}
+              {documentType?.replace('_', ' ')} • <span className="font-mono">{documentId}</span>
             </p>
           </div>
         </div>
@@ -217,6 +243,7 @@ const DocumentEditor = () => {
         <WYSIWYGEditor
           template={template}
           documentType={documentType}
+          documentId={documentId}
           onSave={handleSave}
           onExport={handleExport}
         />

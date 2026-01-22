@@ -1,21 +1,34 @@
 /**
  * WYSIWYG Document Editor Component
  * Uses Fabric.js for canvas manipulation
+ * Features: Undo/Redo, Auto-embedded QR code and Document ID (locked)
+ * Keyboard Shortcuts: Ctrl+Z (undo), Ctrl+Y (redo), Delete (remove), Ctrl+D (duplicate)
  */
 import React, { useRef, useState, useEffect, useCallback } from 'react';
 import * as fabric from 'fabric';
+import QRCode from 'qrcode';
+import JsBarcode from 'jsbarcode';
+import toast from 'react-hot-toast';
 import {
   HiPlus, HiTrash, HiDuplicate, HiSave, HiDownload,
   HiZoomIn, HiZoomOut, HiArrowUp, HiArrowDown,
-  HiPhotograph, HiTemplate
+  HiPhotograph, HiTemplate, HiReply, HiRefresh,
+  HiQrcode, HiLockClosed, HiMenuAlt2
 } from 'react-icons/hi';
 
-const WYSIWYGEditor = ({ template, documentType, onSave, onExport }) => {
+const WYSIWYGEditor = ({ template, documentType, documentId, onSave, onExport }) => {
   const canvasRef = useRef(null);
   const [canvas, setCanvas] = useState(null);
   const [activeObject, setActiveObject] = useState(null);
   const [zoom, setZoom] = useState(0.75);
   const [layers, setLayers] = useState([]);
+  const [codeType, setCodeType] = useState('qr'); // 'qr' or 'barcode'
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  
+  // Undo/Redo state
+  const [history, setHistory] = useState([]);
+  const [historyIndex, setHistoryIndex] = useState(-1);
+  const isUndoRedo = useRef(false);
 
   // Canvas dimensions based on document type
   const getCanvasSize = () => {
@@ -26,6 +39,54 @@ const WYSIWYGEditor = ({ template, documentType, onSave, onExport }) => {
   };
 
   const size = getCanvasSize();
+
+  // Save canvas state for undo/redo
+  const saveHistory = useCallback((c) => {
+    if (!c || isUndoRedo.current) return;
+    
+    const json = c.toJSON(['customName', 'isLocked', 'lockMovementX', 'lockMovementY', 'lockScalingX', 'lockScalingY', 'lockRotation', 'hasControls', 'evented']);
+    
+    setHistory(prev => {
+      const newHistory = prev.slice(0, historyIndex + 1);
+      newHistory.push(JSON.stringify(json));
+      // Keep last 30 states
+      if (newHistory.length > 30) newHistory.shift();
+      return newHistory;
+    });
+    setHistoryIndex(prev => Math.min(prev + 1, 29));
+  }, [historyIndex]);
+
+  // Undo
+  const undo = useCallback(() => {
+    if (historyIndex <= 0 || !canvas) return;
+    
+    isUndoRedo.current = true;
+    const newIndex = historyIndex - 1;
+    const state = JSON.parse(history[newIndex]);
+    
+    canvas.loadFromJSON(state).then(() => {
+      canvas.renderAll();
+      refreshLayers(canvas);
+      setHistoryIndex(newIndex);
+      isUndoRedo.current = false;
+    });
+  }, [canvas, history, historyIndex]);
+
+  // Redo
+  const redo = useCallback(() => {
+    if (historyIndex >= history.length - 1 || !canvas) return;
+    
+    isUndoRedo.current = true;
+    const newIndex = historyIndex + 1;
+    const state = JSON.parse(history[newIndex]);
+    
+    canvas.loadFromJSON(state).then(() => {
+      canvas.renderAll();
+      refreshLayers(canvas);
+      setHistoryIndex(newIndex);
+      isUndoRedo.current = false;
+    });
+  }, [canvas, history, historyIndex]);
 
   // Initialize canvas
   useEffect(() => {
@@ -43,19 +104,247 @@ const WYSIWYGEditor = ({ template, documentType, onSave, onExport }) => {
     fabricCanvas.on('selection:created', (e) => setActiveObject(e.selected?.[0] || null));
     fabricCanvas.on('selection:updated', (e) => setActiveObject(e.selected?.[0] || null));
     fabricCanvas.on('selection:cleared', () => setActiveObject(null));
-    fabricCanvas.on('object:added', () => refreshLayers(fabricCanvas));
-    fabricCanvas.on('object:removed', () => refreshLayers(fabricCanvas));
-    fabricCanvas.on('object:modified', () => refreshLayers(fabricCanvas));
+    fabricCanvas.on('object:added', () => {
+      refreshLayers(fabricCanvas);
+      saveHistory(fabricCanvas);
+    });
+    fabricCanvas.on('object:removed', () => {
+      refreshLayers(fabricCanvas);
+      saveHistory(fabricCanvas);
+    });
+    fabricCanvas.on('object:modified', () => {
+      refreshLayers(fabricCanvas);
+      saveHistory(fabricCanvas);
+    });
 
     setCanvas(fabricCanvas);
 
-    // Apply template
+    // Apply template and add locked elements
     if (template) {
-      setTimeout(() => applyTemplate(fabricCanvas, template), 100);
+      setTimeout(() => {
+        applyTemplate(fabricCanvas, template);
+        addLockedElements(fabricCanvas);
+        saveHistory(fabricCanvas);
+      }, 100);
+    } else {
+      setTimeout(() => {
+        addLockedElements(fabricCanvas);
+        saveHistory(fabricCanvas);
+      }, 100);
     }
 
     return () => fabricCanvas.dispose();
   }, []);
+
+  // Keyboard shortcuts
+  useEffect(() => {
+    if (!canvas) return;
+
+    const handleKeyDown = (e) => {
+      // Check if we're typing in an input field
+      if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+
+      // Ctrl+Z - Undo
+      if (e.ctrlKey && e.key === 'z' && !e.shiftKey) {
+        e.preventDefault();
+        undo();
+        toast.success('Undo', { duration: 1000, icon: '↩️' });
+      }
+      
+      // Ctrl+Y or Ctrl+Shift+Z - Redo
+      if ((e.ctrlKey && e.key === 'y') || (e.ctrlKey && e.shiftKey && e.key === 'z')) {
+        e.preventDefault();
+        redo();
+        toast.success('Redo', { duration: 1000, icon: '↪️' });
+      }
+      
+      // Delete or Backspace - Remove selected object
+      if ((e.key === 'Delete' || e.key === 'Backspace') && activeObject) {
+        e.preventDefault();
+        if (!activeObject.isLocked) {
+          canvas.remove(activeObject);
+          setActiveObject(null);
+          canvas.renderAll();
+          toast.success('Element deleted', { duration: 1000 });
+        } else {
+          toast.error('Cannot delete locked elements', { duration: 2000 });
+        }
+      }
+      
+      // Ctrl+D - Duplicate selected object
+      if (e.ctrlKey && e.key === 'd' && activeObject) {
+        e.preventDefault();
+        if (!activeObject.isLocked) {
+          activeObject.clone().then((cloned) => {
+            cloned.set({
+              left: activeObject.left + 20,
+              top: activeObject.top + 20,
+              isLocked: false,
+            });
+            canvas.add(cloned);
+            canvas.setActiveObject(cloned);
+            canvas.renderAll();
+            toast.success('Element duplicated', { duration: 1000 });
+          });
+        } else {
+          toast.error('Cannot duplicate locked elements', { duration: 2000 });
+        }
+      }
+      
+      // Escape - Deselect
+      if (e.key === 'Escape') {
+        canvas.discardActiveObject();
+        canvas.renderAll();
+        setActiveObject(null);
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [canvas, activeObject, undo, redo]);
+
+  // Add QR/Barcode and Document ID (locked, non-deletable)
+  const addLockedElements = async (c) => {
+    if (!c || !documentId) return;
+    
+    const { width, height } = size;
+    
+    // Generate QR code
+    try {
+      const qrDataUrl = await QRCode.toDataURL(
+        JSON.stringify({ 
+          documentId, 
+          url: `${window.location.origin}/verify/${documentId}` 
+        }),
+        { width: 100, margin: 1 }
+      );
+      
+      // Add QR Code image
+      fabric.FabricImage.fromURL(qrDataUrl).then((qrImg) => {
+        qrImg.set({
+          left: width - 130,
+          top: height - 130,
+          scaleX: 1,
+          scaleY: 1,
+          customName: 'QR Code',
+          isLocked: true,
+          lockRotation: true,
+          hasControls: true,
+          evented: true,
+          // Allow move and resize only
+          cornerStyle: 'circle',
+          cornerColor: '#3b82f6',
+          cornerSize: 8,
+          transparentCorners: false,
+        });
+        c.add(qrImg);
+        c.renderAll();
+      });
+    } catch (err) {
+      console.error('Failed to generate QR code:', err);
+    }
+    
+    // Add Document ID text
+    const docIdText = new fabric.IText(`ID: ${documentId}`, {
+      left: width - 130,
+      top: height - 25,
+      fontSize: 10,
+      fontFamily: 'monospace',
+      fill: '#64748b',
+      customName: 'Document ID',
+      isLocked: true,
+      lockRotation: true,
+      editable: false,
+      hasControls: true,
+      evented: true,
+      cornerStyle: 'circle',
+      cornerColor: '#3b82f6',
+      cornerSize: 8,
+      transparentCorners: false,
+    });
+    c.add(docIdText);
+    c.renderAll();
+  };
+
+  // Switch between QR and Barcode
+  const switchCodeType = async () => {
+    if (!canvas || !documentId) return;
+    
+    // Remove existing code
+    const objects = canvas.getObjects();
+    const codeObj = objects.find(obj => obj.customName === 'QR Code' || obj.customName === 'Barcode');
+    if (codeObj) canvas.remove(codeObj);
+    
+    const { width, height } = size;
+    const newType = codeType === 'qr' ? 'barcode' : 'qr';
+    
+    if (newType === 'qr') {
+      try {
+        const qrDataUrl = await QRCode.toDataURL(
+          JSON.stringify({ documentId, url: `${window.location.origin}/verify/${documentId}` }),
+          { width: 100, margin: 1 }
+        );
+        
+        fabric.FabricImage.fromURL(qrDataUrl).then((qrImg) => {
+          qrImg.set({
+            left: width - 130,
+            top: height - 130,
+            scaleX: 1,
+            scaleY: 1,
+            customName: 'QR Code',
+            isLocked: true,
+            lockRotation: true,
+            hasControls: true,
+            evented: true,
+            cornerStyle: 'circle',
+            cornerColor: '#3b82f6',
+            cornerSize: 8,
+            transparentCorners: false,
+          });
+          canvas.add(qrImg);
+          canvas.renderAll();
+        });
+      } catch (err) {
+        console.error('Failed to generate QR code:', err);
+      }
+    } else {
+      // Generate barcode
+      try {
+        const barcodeCanvas = document.createElement('canvas');
+        JsBarcode(barcodeCanvas, documentId, {
+          format: 'CODE128',
+          width: 1.5,
+          height: 40,
+          displayValue: false,
+          margin: 2,
+        });
+        
+        fabric.FabricImage.fromURL(barcodeCanvas.toDataURL()).then((barcodeImg) => {
+          barcodeImg.set({
+            left: width - 150,
+            top: height - 100,
+            scaleX: 0.8,
+            scaleY: 0.8,
+            customName: 'Barcode',
+            isLocked: true,
+            lockRotation: true,
+            hasControls: true,
+            evented: true,
+            cornerStyle: 'circle',
+            cornerColor: '#3b82f6',
+            cornerSize: 8,
+            transparentCorners: false,
+          });
+          canvas.add(barcodeImg);
+          canvas.renderAll();
+        });
+      } catch (err) {
+        console.error('Failed to generate barcode:', err);
+      }
+    }
+    
+    setCodeType(newType);
+  };
 
   const refreshLayers = (c) => {
     if (!c) return;
@@ -64,6 +353,7 @@ const WYSIWYGEditor = ({ template, documentType, onSave, onExport }) => {
       id: i,
       name: obj.customName || obj.type || 'Object',
       type: obj.type,
+      isLocked: obj.isLocked,
     })));
   };
 
@@ -76,34 +366,6 @@ const WYSIWYGEditor = ({ template, documentType, onSave, onExport }) => {
 
     // Background
     c.backgroundColor = colors.accent || '#ffffff';
-
-    // Border frame
-    const border = new fabric.Rect({
-      left: 20,
-      top: 20,
-      width: width - 40,
-      height: height - 40,
-      fill: 'transparent',
-      stroke: colors.secondary,
-      strokeWidth: 3,
-      selectable: false,
-      customName: 'Border',
-    });
-    c.add(border);
-
-    // Inner border
-    const innerBorder = new fabric.Rect({
-      left: 30,
-      top: 30,
-      width: width - 60,
-      height: height - 60,
-      fill: 'transparent',
-      stroke: colors.primary,
-      strokeWidth: 1,
-      selectable: false,
-      customName: 'Inner Border',
-    });
-    c.add(innerBorder);
 
     // Header decoration
     if (tmpl.style === 'modern' || tmpl.style === 'corporate' || tmpl.style === 'tech') {
@@ -314,9 +576,15 @@ const WYSIWYGEditor = ({ template, documentType, onSave, onExport }) => {
     input.click();
   };
 
-  // Object actions
+  // Object actions - with protection for locked elements
   const deleteObject = () => {
     if (!canvas || !activeObject) return;
+    
+    // Check if object is locked (QR Code, Barcode, Document ID)
+    if (activeObject.isLocked) {
+      return; // Can't delete locked elements
+    }
+    
     canvas.remove(activeObject);
     setActiveObject(null);
     canvas.renderAll();
@@ -324,6 +592,10 @@ const WYSIWYGEditor = ({ template, documentType, onSave, onExport }) => {
 
   const duplicateObject = () => {
     if (!canvas || !activeObject) return;
+    
+    // Don't allow duplicating locked elements
+    if (activeObject.isLocked) return;
+    
     activeObject.clone().then((cloned) => {
       cloned.set({ left: activeObject.left + 20, top: activeObject.top + 20 });
       canvas.add(cloned);
@@ -354,9 +626,9 @@ const WYSIWYGEditor = ({ template, documentType, onSave, onExport }) => {
   // Save & Export
   const handleSave = () => {
     if (!canvas) return;
-    const json = canvas.toJSON(['customName']);
+    const json = canvas.toJSON(['customName', 'isLocked']);
     const preview = canvas.toDataURL({ format: 'png', quality: 1 });
-    onSave?.({ canvasData: json, preview });
+    onSave?.({ canvasData: json, preview, codeType });
   };
 
   const handleExport = () => {
@@ -372,11 +644,34 @@ const WYSIWYGEditor = ({ template, documentType, onSave, onExport }) => {
     canvas.renderAll();
   };
 
+  // Check if active object is locked
+  const isActiveLocked = activeObject?.isLocked;
+
   return (
     <div className="h-full flex bg-gray-100">
+      {/* Sidebar Toggle Button (visible when collapsed) */}
+      {sidebarCollapsed && (
+        <button
+          onClick={() => setSidebarCollapsed(false)}
+          className="fixed left-2 top-20 z-50 p-2 bg-white border border-gray-200 rounded-lg shadow-md hover:bg-gray-50"
+          title="Show Sidebar"
+        >
+          <HiMenuAlt2 className="w-5 h-5" />
+        </button>
+      )}
+
       {/* Left Sidebar - Elements */}
-      <div className="w-56 bg-white border-r border-gray-200 p-4 overflow-y-auto flex-shrink-0">
-        <h3 className="text-xs font-semibold text-gray-500 uppercase mb-3">Add Elements</h3>
+      <div className={`${sidebarCollapsed ? 'hidden' : 'w-56'} bg-white border-r border-gray-200 p-4 overflow-y-auto flex-shrink-0 transition-all`}>
+        <div className="flex items-center justify-between mb-3">
+          <h3 className="text-xs font-semibold text-gray-500 uppercase">Add Elements</h3>
+          <button
+            onClick={() => setSidebarCollapsed(true)}
+            className="p-1 hover:bg-gray-100 rounded"
+            title="Collapse Sidebar"
+          >
+            <HiMenuAlt2 className="w-4 h-4" />
+          </button>
+        </div>
         
         {/* Text */}
         <div className="space-y-2 mb-6">
@@ -417,6 +712,21 @@ const WYSIWYGEditor = ({ template, documentType, onSave, onExport }) => {
           Upload Image
         </button>
 
+        {/* Code Type Switcher */}
+        <div className="mt-6 pt-4 border-t border-gray-200">
+          <h3 className="text-xs font-semibold text-gray-500 uppercase mb-3">Verification Code</h3>
+          <button
+            onClick={switchCodeType}
+            className="w-full p-2 text-sm bg-gray-50 hover:bg-blue-50 hover:text-blue-600 rounded border border-gray-200 transition-colors flex items-center gap-2"
+          >
+            <HiQrcode className="w-4 h-4" />
+            Switch to {codeType === 'qr' ? 'Barcode' : 'QR Code'}
+          </button>
+          <p className="text-xs text-gray-400 mt-2">
+            Current: {codeType === 'qr' ? 'QR Code' : 'Barcode'}
+          </p>
+        </div>
+
         {/* Layers */}
         <h3 className="text-xs font-semibold text-gray-500 uppercase mt-6 mb-3">Layers ({layers.length})</h3>
         <div className="space-y-1 max-h-48 overflow-y-auto">
@@ -430,12 +740,13 @@ const WYSIWYGEditor = ({ template, documentType, onSave, onExport }) => {
                   canvas.renderAll();
                 }
               }}
-              className={`p-2 text-xs rounded cursor-pointer truncate ${
+              className={`p-2 text-xs rounded cursor-pointer truncate flex items-center gap-1 ${
                 activeObject === canvas?.getObjects()[layers.length - 1 - idx]
                   ? 'bg-blue-100 text-blue-700'
                   : 'bg-gray-50 hover:bg-gray-100'
               }`}
             >
+              {layer.isLocked && <HiLockClosed className="w-3 h-3 text-amber-500" />}
               {layer.name}
             </div>
           ))}
@@ -447,6 +758,26 @@ const WYSIWYGEditor = ({ template, documentType, onSave, onExport }) => {
         {/* Toolbar */}
         <div className="h-12 bg-white border-b border-gray-200 px-4 flex items-center justify-between flex-shrink-0">
           <div className="flex items-center gap-2">
+            {/* Undo/Redo */}
+            <button 
+              onClick={undo} 
+              disabled={historyIndex <= 0}
+              className={`p-1.5 rounded ${historyIndex <= 0 ? 'text-gray-300' : 'hover:bg-gray-100'}`}
+              title="Undo (Ctrl+Z)"
+            >
+              <HiReply className="w-4 h-4" />
+            </button>
+            <button 
+              onClick={redo} 
+              disabled={historyIndex >= history.length - 1}
+              className={`p-1.5 rounded ${historyIndex >= history.length - 1 ? 'text-gray-300' : 'hover:bg-gray-100'}`}
+              title="Redo (Ctrl+Y)"
+            >
+              <HiReply className="w-4 h-4 transform scale-x-[-1]" />
+            </button>
+
+            <div className="w-px h-6 bg-gray-200 mx-2" />
+
             {/* Zoom */}
             <button onClick={() => handleZoom(-0.1)} className="p-1.5 hover:bg-gray-100 rounded">
               <HiZoomOut className="w-4 h-4" />
@@ -461,12 +792,21 @@ const WYSIWYGEditor = ({ template, documentType, onSave, onExport }) => {
             {/* Object Actions */}
             {activeObject && (
               <>
-                <button onClick={duplicateObject} className="p-1.5 hover:bg-gray-100 rounded" title="Duplicate">
-                  <HiDuplicate className="w-4 h-4" />
-                </button>
-                <button onClick={deleteObject} className="p-1.5 hover:bg-red-100 text-red-600 rounded" title="Delete">
-                  <HiTrash className="w-4 h-4" />
-                </button>
+                {!isActiveLocked && (
+                  <button onClick={duplicateObject} className="p-1.5 hover:bg-gray-100 rounded" title="Duplicate">
+                    <HiDuplicate className="w-4 h-4" />
+                  </button>
+                )}
+                {!isActiveLocked ? (
+                  <button onClick={deleteObject} className="p-1.5 hover:bg-red-100 text-red-600 rounded" title="Delete">
+                    <HiTrash className="w-4 h-4" />
+                  </button>
+                ) : (
+                  <span className="px-2 py-1 bg-amber-100 text-amber-700 text-xs rounded flex items-center gap-1">
+                    <HiLockClosed className="w-3 h-3" />
+                    Locked
+                  </span>
+                )}
                 <button onClick={bringForward} className="p-1.5 hover:bg-gray-100 rounded" title="Bring Forward">
                   <HiArrowUp className="w-4 h-4" />
                 </button>
@@ -512,6 +852,14 @@ const WYSIWYGEditor = ({ template, documentType, onSave, onExport }) => {
         
         {activeObject ? (
           <div className="space-y-4">
+            {/* Locked indicator */}
+            {isActiveLocked && (
+              <div className="p-2 bg-amber-50 border border-amber-200 rounded text-xs text-amber-700 flex items-center gap-2">
+                <HiLockClosed className="w-4 h-4" />
+                This element cannot be deleted
+              </div>
+            )}
+
             {/* Position */}
             <div className="grid grid-cols-2 gap-2">
               <div>
@@ -534,22 +882,24 @@ const WYSIWYGEditor = ({ template, documentType, onSave, onExport }) => {
               </div>
             </div>
 
-            {/* Rotation */}
-            <div>
-              <label className="text-xs text-gray-500">Rotation</label>
-              <input
-                type="range"
-                min="0"
-                max="360"
-                value={activeObject.angle || 0}
-                onChange={(e) => updateProperty('angle', parseInt(e.target.value))}
-                className="w-full"
-              />
-              <span className="text-xs text-gray-500">{Math.round(activeObject.angle || 0)}°</span>
-            </div>
+            {/* Rotation - only if not locked */}
+            {!isActiveLocked && (
+              <div>
+                <label className="text-xs text-gray-500">Rotation</label>
+                <input
+                  type="range"
+                  min="0"
+                  max="360"
+                  value={activeObject.angle || 0}
+                  onChange={(e) => updateProperty('angle', parseInt(e.target.value))}
+                  className="w-full"
+                />
+                <span className="text-xs text-gray-500">{Math.round(activeObject.angle || 0)}°</span>
+              </div>
+            )}
 
             {/* Color */}
-            {activeObject.fill !== undefined && activeObject.type !== 'line' && (
+            {activeObject.fill !== undefined && activeObject.type !== 'line' && !isActiveLocked && (
               <div>
                 <label className="text-xs text-gray-500">Fill Color</label>
                 <input
@@ -562,7 +912,7 @@ const WYSIWYGEditor = ({ template, documentType, onSave, onExport }) => {
             )}
 
             {/* Text Properties */}
-            {(activeObject.type === 'i-text' || activeObject.type === 'text') && (
+            {(activeObject.type === 'i-text' || activeObject.type === 'text') && !isActiveLocked && (
               <>
                 <div>
                   <label className="text-xs text-gray-500">Font Size</label>
@@ -573,36 +923,96 @@ const WYSIWYGEditor = ({ template, documentType, onSave, onExport }) => {
                     className="w-full px-2 py-1 border border-gray-200 rounded text-sm"
                   />
                 </div>
+                
+                {/* Font Family */}
+                <div>
+                  <label className="text-xs text-gray-500">Font Family</label>
+                  <select
+                    value={activeObject.fontFamily || 'Arial'}
+                    onChange={(e) => updateProperty('fontFamily', e.target.value)}
+                    className="w-full px-2 py-1 border border-gray-200 rounded text-sm"
+                  >
+                    <option value="Arial">Arial</option>
+                    <option value="Times New Roman">Times New Roman</option>
+                    <option value="Georgia">Georgia</option>
+                    <option value="Verdana">Verdana</option>
+                    <option value="Courier New">Courier New</option>
+                    <option value="Helvetica">Helvetica</option>
+                    <option value="Trebuchet MS">Trebuchet MS</option>
+                    <option value="Impact">Impact</option>
+                  </select>
+                </div>
+
+                {/* Text Styling: Bold, Italic, Underline */}
                 <div className="flex gap-1">
                   <button
                     onClick={() => updateProperty('fontWeight', activeObject.fontWeight === 'bold' ? 'normal' : 'bold')}
-                    className={`flex-1 p-1.5 rounded border text-sm ${activeObject.fontWeight === 'bold' ? 'bg-blue-100 border-blue-300' : 'border-gray-200'}`}
+                    className={`flex-1 p-1.5 rounded border text-sm font-bold ${activeObject.fontWeight === 'bold' ? 'bg-blue-100 border-blue-300' : 'border-gray-200'}`}
+                    title="Bold"
                   >
                     B
                   </button>
                   <button
                     onClick={() => updateProperty('fontStyle', activeObject.fontStyle === 'italic' ? 'normal' : 'italic')}
                     className={`flex-1 p-1.5 rounded border text-sm italic ${activeObject.fontStyle === 'italic' ? 'bg-blue-100 border-blue-300' : 'border-gray-200'}`}
+                    title="Italic"
                   >
                     I
                   </button>
+                  <button
+                    onClick={() => updateProperty('underline', !activeObject.underline)}
+                    className={`flex-1 p-1.5 rounded border text-sm underline ${activeObject.underline ? 'bg-blue-100 border-blue-300' : 'border-gray-200'}`}
+                    title="Underline"
+                  >
+                    U
+                  </button>
+                </div>
+
+                {/* Text Alignment */}
+                <div>
+                  <label className="text-xs text-gray-500">Text Align</label>
+                  <div className="flex gap-1 mt-1">
+                    <button
+                      onClick={() => updateProperty('textAlign', 'left')}
+                      className={`flex-1 p-1.5 rounded border text-xs ${activeObject.textAlign === 'left' ? 'bg-blue-100 border-blue-300' : 'border-gray-200'}`}
+                      title="Align Left"
+                    >
+                      ⫷
+                    </button>
+                    <button
+                      onClick={() => updateProperty('textAlign', 'center')}
+                      className={`flex-1 p-1.5 rounded border text-xs ${activeObject.textAlign === 'center' ? 'bg-blue-100 border-blue-300' : 'border-gray-200'}`}
+                      title="Align Center"
+                    >
+                      ☰
+                    </button>
+                    <button
+                      onClick={() => updateProperty('textAlign', 'right')}
+                      className={`flex-1 p-1.5 rounded border text-xs ${activeObject.textAlign === 'right' ? 'bg-blue-100 border-blue-300' : 'border-gray-200'}`}
+                      title="Align Right"
+                    >
+                      ⫸
+                    </button>
+                  </div>
                 </div>
               </>
             )}
 
             {/* Opacity */}
-            <div>
-              <label className="text-xs text-gray-500">Opacity</label>
-              <input
-                type="range"
-                min="0"
-                max="1"
-                step="0.1"
-                value={activeObject.opacity || 1}
-                onChange={(e) => updateProperty('opacity', parseFloat(e.target.value))}
-                className="w-full"
-              />
-            </div>
+            {!isActiveLocked && (
+              <div>
+                <label className="text-xs text-gray-500">Opacity</label>
+                <input
+                  type="range"
+                  min="0"
+                  max="1"
+                  step="0.1"
+                  value={activeObject.opacity || 1}
+                  onChange={(e) => updateProperty('opacity', parseFloat(e.target.value))}
+                  className="w-full"
+                />
+              </div>
+            )}
           </div>
         ) : (
           <p className="text-sm text-gray-400 text-center py-8">
@@ -610,9 +1020,17 @@ const WYSIWYGEditor = ({ template, documentType, onSave, onExport }) => {
           </p>
         )}
 
+        {/* Document Info */}
+        {documentId && (
+          <div className="mt-6 pt-4 border-t border-gray-200">
+            <h3 className="text-xs font-semibold text-gray-500 uppercase mb-2">Document</h3>
+            <p className="text-xs font-mono text-gray-600 break-all">{documentId}</p>
+          </div>
+        )}
+
         {/* Template Info */}
         {template && (
-          <div className="mt-6 pt-4 border-t border-gray-200">
+          <div className="mt-4 pt-4 border-t border-gray-200">
             <h3 className="text-xs font-semibold text-gray-500 uppercase mb-2">Template</h3>
             <div className="flex items-center gap-2">
               <div

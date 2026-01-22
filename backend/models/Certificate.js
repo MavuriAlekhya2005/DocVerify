@@ -75,6 +75,9 @@ const certificateSchema = new mongoose.Schema({
   filePath: {
     type: String,
   },
+  previewUrl: {
+    type: String, // URL to preview image (for WYSIWYG documents)
+  },
   
   // NEW: Extracted document data (two-tier storage)
   primaryDetails: primaryDetailsSchema,    // Quick-read data (blockchain-suitable)

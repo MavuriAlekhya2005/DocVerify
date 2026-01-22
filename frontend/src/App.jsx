@@ -1,42 +1,53 @@
 import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
 import { Toaster } from 'react-hot-toast';
+import { Suspense, lazy } from 'react';
 
-// Pages
-import LandingPage from './pages/LandingPage';
-import Login from './pages/auth/Login';
-import Register from './pages/auth/Register';
-import ForgotPassword from './pages/auth/ForgotPassword';
-import AuthCallback from './pages/auth/AuthCallback';
-import VerifyPage from './pages/VerifyPage';
+// Loading fallback component
+const PageLoader = () => (
+  <div className="min-h-screen bg-dark-300 flex items-center justify-center">
+    <div className="text-center">
+      <div className="w-12 h-12 border-4 border-primary-600/30 border-t-primary-600 rounded-full animate-spin mx-auto mb-4"></div>
+      <p className="text-gray-400">Loading...</p>
+    </div>
+  </div>
+);
 
-// Components
+// Lazy loaded pages for better performance
+const LandingPage = lazy(() => import('./pages/LandingPage'));
+const Login = lazy(() => import('./pages/auth/Login'));
+const Register = lazy(() => import('./pages/auth/Register'));
+const ForgotPassword = lazy(() => import('./pages/auth/ForgotPassword'));
+const AuthCallback = lazy(() => import('./pages/auth/AuthCallback'));
+const VerifyPage = lazy(() => import('./pages/VerifyPage'));
+
+// Components (not lazy loaded as they're small)
 import ProtectedRoute from './components/ProtectedRoute';
 
 // Dashboard Pages
-import UserDashboard from './pages/dashboard/UserDashboard';
-import VerifierDashboard from './pages/dashboard/VerifierDashboard';
-import AdminDashboard from './pages/dashboard/AdminDashboard';
+const UserDashboard = lazy(() => import('./pages/dashboard/UserDashboard'));
+const VerifierDashboard = lazy(() => import('./pages/dashboard/VerifierDashboard'));
+const AdminDashboard = lazy(() => import('./pages/dashboard/AdminDashboard'));
 
 // User Dashboard Sub-pages
-import UploadCertificate from './pages/dashboard/user/UploadCertificate';
-import MyCertificates from './pages/dashboard/user/MyCertificates';
-import CertificateDetails from './pages/dashboard/user/CertificateDetails';
-import SelectTemplate from './pages/dashboard/user/SelectTemplate';
-import DocumentEditor from './pages/dashboard/user/DocumentEditor';
-import IssueDocument from './pages/dashboard/user/IssueDocument';
+const UploadCertificate = lazy(() => import('./pages/dashboard/user/UploadCertificate'));
+const MyCertificates = lazy(() => import('./pages/dashboard/user/MyCertificates'));
+const CertificateDetails = lazy(() => import('./pages/dashboard/user/CertificateDetails'));
+const SelectTemplate = lazy(() => import('./pages/dashboard/user/SelectTemplate'));
+const DocumentEditor = lazy(() => import('./pages/dashboard/user/DocumentEditor'));
+const IssueDocument = lazy(() => import('./pages/dashboard/user/IssueDocument'));
 
 // Admin Dashboard Sub-pages
-import BulkIssuance from './pages/dashboard/admin/BulkIssuance';
-import ManageCertificates from './pages/dashboard/admin/ManageCertificates';
-import Analytics from './pages/dashboard/admin/Analytics';
-import Users from './pages/dashboard/admin/Users';
+const BulkIssuance = lazy(() => import('./pages/dashboard/admin/BulkIssuance'));
+const ManageCertificates = lazy(() => import('./pages/dashboard/admin/ManageCertificates'));
+const Analytics = lazy(() => import('./pages/dashboard/admin/Analytics'));
+const Users = lazy(() => import('./pages/dashboard/admin/Users'));
 
 // Settings page
-import Settings from './pages/dashboard/Settings';
+const Settings = lazy(() => import('./pages/dashboard/Settings'));
 
 // Verifier Dashboard Sub-pages
-import ScanVerify from './pages/dashboard/verifier/ScanVerify';
-import VerificationHistory from './pages/dashboard/verifier/VerificationHistory';
+const ScanVerify = lazy(() => import('./pages/dashboard/verifier/ScanVerify'));
+const VerificationHistory = lazy(() => import('./pages/dashboard/verifier/VerificationHistory'));
 
 function App() {
   return (
@@ -65,69 +76,71 @@ function App() {
           },
         }}
       />
-      <Routes>
-        {/* Public Routes */}
-        <Route path="/" element={<LandingPage />} />
-        <Route path="/login" element={<Login />} />
-        <Route path="/register" element={<Register />} />
-        <Route path="/forgot-password" element={<ForgotPassword />} />
-        <Route path="/auth/callback" element={<AuthCallback />} />
-        
-        {/* Public verification routes */}
-        <Route path="/verify" element={<VerifyPage />} />
-        <Route path="/verify/:id" element={<VerifyPage />} />
-        
-        {/* Standalone Document Editor (opens in new window) */}
-        <Route path="/editor" element={
-          <ProtectedRoute allowedRoles={['user', 'institution', 'admin']}>
-            <DocumentEditor />
-          </ProtectedRoute>
-        } />
-        
-        {/* Protected User Dashboard Routes */}
-        <Route path="/dashboard" element={
-          <ProtectedRoute allowedRoles={['user', 'institution', 'admin']}>
-            <UserDashboard />
-          </ProtectedRoute>
-        }>
-          <Route index element={<MyCertificates />} />
-          <Route path="create" element={<SelectTemplate />} />
-          <Route path="bulk-issue" element={<BulkIssuance />} />
-          <Route path="upload" element={<UploadCertificate />} />
-          <Route path="certificates" element={<MyCertificates />} />
-          <Route path="certificates/:id" element={<CertificateDetails />} />
-          <Route path="documents/:id" element={<CertificateDetails />} />
-          <Route path="settings" element={<Settings userRole="user" />} />
-        </Route>
-        
-        {/* Protected Admin Dashboard Routes */}
-        <Route path="/admin" element={
-          <ProtectedRoute allowedRoles={['admin', 'institution']}>
-            <AdminDashboard />
-          </ProtectedRoute>
-        }>
-          <Route index element={<Analytics />} />
-          <Route path="analytics" element={<Analytics />} />
-          <Route path="issue" element={<IssueDocument />} />
-          <Route path="bulk-issue" element={<BulkIssuance />} />
-          <Route path="manage" element={<ManageCertificates />} />
-          <Route path="users" element={<Users />} />
-          <Route path="settings" element={<Settings userRole="admin" />} />
-        </Route>
-        
-        {/* Protected Verifier Dashboard Routes */}
-        <Route path="/verifier" element={
-          <ProtectedRoute allowedRoles={['verifier', 'admin', 'institution', 'user']}>
-            <VerifierDashboard />
-          </ProtectedRoute>
-        }>
-          <Route index element={<ScanVerify />} />
-          <Route path="scan" element={<ScanVerify />} />
-          <Route path="history" element={<VerificationHistory />} />
-          <Route path="settings" element={<Settings userRole="verifier" />} />
-          <Route path=":id" element={<ScanVerify />} />
-        </Route>
-      </Routes>
+      <Suspense fallback={<PageLoader />}>
+        <Routes>
+          {/* Public Routes */}
+          <Route path="/" element={<LandingPage />} />
+          <Route path="/login" element={<Login />} />
+          <Route path="/register" element={<Register />} />
+          <Route path="/forgot-password" element={<ForgotPassword />} />
+          <Route path="/auth/callback" element={<AuthCallback />} />
+          
+          {/* Public verification routes */}
+          <Route path="/verify" element={<VerifyPage />} />
+          <Route path="/verify/:id" element={<VerifyPage />} />
+          
+          {/* Standalone Document Editor (opens in new window) */}
+          <Route path="/editor" element={
+            <ProtectedRoute allowedRoles={['user', 'institution', 'admin']}>
+              <DocumentEditor />
+            </ProtectedRoute>
+          } />
+          
+          {/* Protected User Dashboard Routes */}
+          <Route path="/dashboard" element={
+            <ProtectedRoute allowedRoles={['user', 'institution', 'admin']}>
+              <UserDashboard />
+            </ProtectedRoute>
+          }>
+            <Route index element={<MyCertificates />} />
+            <Route path="create" element={<SelectTemplate />} />
+            <Route path="bulk-issue" element={<BulkIssuance />} />
+            <Route path="upload" element={<UploadCertificate />} />
+            <Route path="certificates" element={<MyCertificates />} />
+            <Route path="certificates/:id" element={<CertificateDetails />} />
+            <Route path="documents/:id" element={<CertificateDetails />} />
+            <Route path="settings" element={<Settings userRole="user" />} />
+          </Route>
+          
+          {/* Protected Admin Dashboard Routes */}
+          <Route path="/admin" element={
+            <ProtectedRoute allowedRoles={['admin', 'institution']}>
+              <AdminDashboard />
+            </ProtectedRoute>
+          }>
+            <Route index element={<Analytics />} />
+            <Route path="analytics" element={<Analytics />} />
+            <Route path="issue" element={<IssueDocument />} />
+            <Route path="bulk-issue" element={<BulkIssuance />} />
+            <Route path="manage" element={<ManageCertificates />} />
+            <Route path="users" element={<Users />} />
+            <Route path="settings" element={<Settings userRole="admin" />} />
+          </Route>
+          
+          {/* Protected Verifier Dashboard Routes */}
+          <Route path="/verifier" element={
+            <ProtectedRoute allowedRoles={['verifier', 'admin', 'institution', 'user']}>
+              <VerifierDashboard />
+            </ProtectedRoute>
+          }>
+            <Route index element={<ScanVerify />} />
+            <Route path="scan" element={<ScanVerify />} />
+            <Route path="history" element={<VerificationHistory />} />
+            <Route path="settings" element={<Settings userRole="verifier" />} />
+            <Route path=":id" element={<ScanVerify />} />
+          </Route>
+        </Routes>
+      </Suspense>
     </Router>
   );
 }

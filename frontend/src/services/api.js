@@ -1,9 +1,46 @@
-const API_URL = 'http://localhost:5000/api';
+// Use environment variable for API URL with fallback to localhost for development
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
 
 // Helper to get auth headers
 const getAuthHeaders = () => {
   const token = localStorage.getItem('token');
   return token ? { 'Authorization': `Bearer ${token}` } : {};
+};
+
+// Helper for handling API responses with better error handling
+const handleResponse = async (response) => {
+  if (!response.ok) {
+    // Handle specific HTTP errors
+    if (response.status === 401) {
+      localStorage.removeItem('token');
+      localStorage.removeItem('user');
+      // Could trigger a redirect to login here if needed
+    }
+    // Try to get error message from response
+    const errorData = await response.json().catch(() => ({}));
+    return {
+      success: false,
+      error: errorData.error || `HTTP Error: ${response.status}`,
+      status: response.status,
+    };
+  }
+  return response.json();
+};
+
+// Helper for wrapping fetch with network error handling
+const safeFetch = async (url, options = {}) => {
+  try {
+    const response = await fetch(url, options);
+    return handleResponse(response);
+  } catch (error) {
+    // Network errors (offline, CORS, etc.)
+    console.error('Network error:', error);
+    return {
+      success: false,
+      error: 'Network error. Please check your connection.',
+      isNetworkError: true,
+    };
+  }
 };
 
 export const api = {

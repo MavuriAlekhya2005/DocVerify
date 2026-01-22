@@ -16,6 +16,8 @@ import {
 } from 'react-icons/hi';
 import Logo from '../../components/Logo';
 import PortalSwitcher from '../../components/PortalSwitcher';
+import ThemeToggle from '../../components/ThemeToggle';
+import Breadcrumb from '../../components/Breadcrumb';
 import api from '../../services/api';
 
 const UserDashboard = () => {
@@ -162,6 +164,8 @@ const UserDashboard = () => {
                 <HiBell className="w-6 h-6" />
               </button>
               
+              <ThemeToggle />
+              
               <div className="flex items-center gap-3">
                 <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-primary-600 to-accent-600 
                   flex items-center justify-center text-white font-bold">
@@ -178,6 +182,7 @@ const UserDashboard = () => {
 
         {/* Page Content */}
         <main className="flex-1 p-6 overflow-y-auto">
+          <Breadcrumb className="mb-4" />
           <Outlet />
         </main>
       </div>
