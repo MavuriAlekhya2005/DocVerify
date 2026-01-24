@@ -1,0 +1,17 @@
+/* GlobalBackground - Fixed full-viewport background */
+.global-background {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  z-index: -1;
+  pointer-events: none;
+  overflow: hidden;
+}
+
+.global-background canvas {
+  display: block;
+  width: 100% !important;
+  height: 100% !important;
+}

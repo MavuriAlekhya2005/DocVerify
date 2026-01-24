@@ -1,9 +1,42 @@
 // Use environment variable for API URL with fallback to localhost for development
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
 
+// Session timeout in milliseconds (30 minutes)
+const SESSION_TIMEOUT = 30 * 60 * 1000;
+
+// Update last activity timestamp
+const updateLastActivity = () => {
+  localStorage.setItem('lastActivity', Date.now().toString());
+};
+
+// Check if session has expired
+const isSessionExpired = () => {
+  const lastActivity = localStorage.getItem('lastActivity');
+  if (!lastActivity) return false;
+  
+  const timeSinceLastActivity = Date.now() - parseInt(lastActivity, 10);
+  return timeSinceLastActivity > SESSION_TIMEOUT;
+};
+
+// Clear session data
+const clearSession = () => {
+  localStorage.removeItem('token');
+  localStorage.removeItem('user');
+  localStorage.removeItem('lastActivity');
+};
+
 // Helper to get auth headers
 const getAuthHeaders = () => {
+  // Check for session expiry before returning headers
+  if (isSessionExpired()) {
+    clearSession();
+    return {};
+  }
+  
   const token = localStorage.getItem('token');
+  if (token) {
+    updateLastActivity(); // Update activity on each authenticated request
+  }
   return token ? { 'Authorization': `Bearer ${token}` } : {};
 };
 
@@ -12,8 +45,7 @@ const handleResponse = async (response) => {
   if (!response.ok) {
     // Handle specific HTTP errors
     if (response.status === 401) {
-      localStorage.removeItem('token');
-      localStorage.removeItem('user');
+      clearSession();
       // Could trigger a redirect to login here if needed
     }
     // Try to get error message from response
@@ -44,6 +76,28 @@ const safeFetch = async (url, options = {}) => {
 };
 
 export const api = {
+  // ==================== SESSION MANAGEMENT ====================
+  
+  // Check and handle session timeout
+  checkSession: () => {
+    if (isSessionExpired()) {
+      clearSession();
+      return false;
+    }
+    updateLastActivity();
+    return true;
+  },
+  
+  // Get time remaining in session (in seconds)
+  getSessionTimeRemaining: () => {
+    const lastActivity = localStorage.getItem('lastActivity');
+    if (!lastActivity) return SESSION_TIMEOUT / 1000;
+    
+    const timeSinceLastActivity = Date.now() - parseInt(lastActivity, 10);
+    const remaining = Math.max(0, SESSION_TIMEOUT - timeSinceLastActivity);
+    return Math.floor(remaining / 1000);
+  },
+  
   // ==================== OTP ====================
 
   // Send OTP to email
@@ -89,6 +143,7 @@ export const api = {
     if (data.success && data.data.token) {
       localStorage.setItem('token', data.data.token);
       localStorage.setItem('user', JSON.stringify(data.data.user));
+      updateLastActivity(); // Set initial activity timestamp
     }
     return data;
   },
@@ -104,24 +159,34 @@ export const api = {
     if (data.success && data.data.token) {
       localStorage.setItem('token', data.data.token);
       localStorage.setItem('user', JSON.stringify(data.data.user));
+      updateLastActivity(); // Set initial activity timestamp
     }
     return data;
   },
 
   // Logout user
   logout: () => {
-    localStorage.removeItem('token');
-    localStorage.removeItem('user');
+    clearSession();
   },
 
   // Get current user
   getCurrentUser: () => {
+    // Check session before returning user
+    if (isSessionExpired()) {
+      clearSession();
+      return null;
+    }
     const user = localStorage.getItem('user');
     return user ? JSON.parse(user) : null;
   },
 
   // Check if user is logged in
   isAuthenticated: () => {
+    // Check session expiry
+    if (isSessionExpired()) {
+      clearSession();
+      return false;
+    }
     return !!localStorage.getItem('token');
   },
 

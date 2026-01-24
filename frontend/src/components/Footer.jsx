@@ -37,16 +37,16 @@ const Footer = () => {
   ];
 
   return (
-    <footer className="bg-dark-300 border-t border-white/10">
+    <footer className="glass-container border-t border-white/5 mt-auto">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-16">
         <div className="grid grid-cols-2 md:grid-cols-6 gap-8 lg:gap-12">
           {/* Brand Column */}
           <div className="col-span-2">
             <Link to="/" className="flex items-center gap-2 mb-6">
               <Logo className="h-10 w-10" />
-              <span className="text-xl font-bold text-white font-display">DocVerify</span>
+              <span className="text-xl font-bold text-white font-display text-glow-sm">DocVerify</span>
             </Link>
-            <p className="text-gray-400 text-sm mb-6 max-w-xs">
+            <p className="text-gray-300 text-sm mb-6 max-w-xs">
               Secure, AI-powered certificate verification with blockchain immutability. 
               Trusted by institutions worldwide.
             </p>
@@ -56,8 +56,8 @@ const Footer = () => {
                   key={social.label}
                   href={social.href}
                   aria-label={social.label}
-                  className="w-10 h-10 rounded-lg bg-white/5 flex items-center justify-center text-gray-400 
-                  hover:bg-primary-600 hover:text-white transition-all duration-300"
+                  className="w-10 h-10 rounded-lg glass-container-light flex items-center justify-center text-gray-400 
+                  hover:bg-primary-600/30 hover:text-white hover:neon-border transition-all duration-300"
                 >
                   <social.icon size={18} />
                 </a>

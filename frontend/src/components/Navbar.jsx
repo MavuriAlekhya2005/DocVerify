@@ -1,14 +1,21 @@
 import { useState, useEffect } from 'react';
-import { Link, useLocation } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { HiMenu, HiX, HiShieldCheck, HiUpload, HiCollection, HiCog } from 'react-icons/hi';
+import { HiMenu, HiX, HiShieldCheck, HiUpload, HiCollection, HiCog, HiLogout, HiViewGrid } from 'react-icons/hi';
 import Logo from './Logo';
 import ThemeToggle from './ThemeToggle';
+import api from '../services/api';
 
 const Navbar = () => {
   const [isScrolled, setIsScrolled] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
   const location = useLocation();
+  const navigate = useNavigate();
+  
+  // Get authentication state
+  const isAuthenticated = api.isAuthenticated();
+  const user = api.getCurrentUser();
 
   // Check if we're on landing page
   const isLandingPage = location.pathname === '/';
@@ -21,6 +28,18 @@ const Navbar = () => {
     return () => window.removeEventListener('scroll', handleScroll);
   }, []);
 
+  const handleLogout = () => {
+    api.logout();
+    navigate('/login');
+    setIsUserMenuOpen(false);
+    setIsMobileMenuOpen(false);
+  };
+
+  const getInitials = (name) => {
+    if (!name) return 'U';
+    return name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2);
+  };
+
   // Landing page nav links
   const landingLinks = [
     { name: 'Features', href: '#features' },
@@ -30,11 +49,15 @@ const Navbar = () => {
 
   // Main app nav links
   const appLinks = [
-    { name: 'Verify', href: '/verifier', icon: HiShieldCheck },
+    { name: 'Verify', href: '/verify', icon: HiShieldCheck },
     { name: 'Upload', href: '/dashboard/upload', icon: HiUpload },
     { name: 'My Documents', href: '/dashboard/certificates', icon: HiCollection },
-    { name: 'Admin', href: '/admin', icon: HiCog },
   ];
+
+  // Add admin link if user is admin
+  if (user?.role === 'admin' || user?.role === 'institution') {
+    appLinks.push({ name: 'Admin', href: '/admin', icon: HiCog });
+  }
 
   return (
     <motion.nav
@@ -42,7 +65,7 @@ const Navbar = () => {
       animate={{ y: 0 }}
       className={`fixed top-0 left-0 right-0 z-50 transition-all duration-300 ${
         isScrolled || !isLandingPage
-          ? 'bg-dark-200/80 backdrop-blur-xl border-b border-white/10' 
+          ? 'glass-header' 
           : 'bg-transparent'
       }`}
     >
@@ -51,7 +74,7 @@ const Navbar = () => {
           {/* Logo */}
           <Link to="/" className="flex items-center gap-2">
             <Logo className="h-8 w-8" />
-            <span className="text-xl font-bold text-white font-display">DocVerify</span>
+            <span className="text-xl font-bold text-white font-display text-glow-sm">DocVerify</span>
           </Link>
 
           {/* Desktop Navigation */}
@@ -89,15 +112,84 @@ const Navbar = () => {
           {/* Auth Buttons / User Menu */}
           <div className="hidden md:flex items-center gap-3">
             <ThemeToggle />
-            {isLandingPage ? (
-              <>
-                <Link
-                  to="/verifier"
-                  className="flex items-center gap-2 text-accent-400 hover:text-accent-300 transition-colors duration-300 text-sm font-medium px-3 py-2 rounded-lg hover:bg-accent-500/10"
+            
+            {/* Verify Now Button - Always visible */}
+            <Link
+              to="/verify"
+              className="flex items-center gap-2 text-accent-400 hover:text-accent-300 transition-colors duration-300 text-sm font-medium px-3 py-2 rounded-lg hover:bg-accent-500/10"
+            >
+              <HiShieldCheck className="w-4 h-4" />
+              Verify Now
+            </Link>
+            
+            {isAuthenticated ? (
+              // Logged-in user menu
+              <div className="relative">
+                <button
+                  onClick={() => setIsUserMenuOpen(!isUserMenuOpen)}
+                  className="flex items-center gap-2 px-2 py-1.5 rounded-xl hover:bg-white/5 transition-all"
                 >
-                  <HiShieldCheck className="w-4 h-4" />
-                  Verify Now
-                </Link>
+                  <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-primary-600 to-accent-600 
+                    flex items-center justify-center text-white font-bold text-sm">
+                    {getInitials(user?.name)}
+                  </div>
+                  <span className="text-white text-sm font-medium hidden lg:block">
+                    {user?.name?.split(' ')[0] || 'User'}
+                  </span>
+                </button>
+                
+                <AnimatePresence>
+                  {isUserMenuOpen && (
+                    <>
+                      <div 
+                        className="fixed inset-0 z-40" 
+                        onClick={() => setIsUserMenuOpen(false)}
+                      />
+                      <motion.div
+                        initial={{ opacity: 0, y: -10, scale: 0.95 }}
+                        animate={{ opacity: 1, y: 0, scale: 1 }}
+                        exit={{ opacity: 0, y: -10, scale: 0.95 }}
+                        transition={{ duration: 0.15 }}
+                        className="absolute right-0 top-full mt-2 w-56 z-[100] rounded-xl overflow-hidden"
+                        style={{
+                          background: 'rgba(15, 23, 42, 0.95)',
+                          backdropFilter: 'blur(20px)',
+                          WebkitBackdropFilter: 'blur(20px)',
+                          border: '1px solid rgba(99, 102, 241, 0.4)',
+                          boxShadow: '0 0 20px rgba(99, 102, 241, 0.15), 0 8px 32px rgba(0, 0, 0, 0.4)'
+                        }}
+                      >
+                        <div className="p-3 border-b border-primary-500/30">
+                          <p className="text-white font-medium text-sm">{user?.name}</p>
+                          <p className="text-gray-400 text-xs">{user?.email}</p>
+                        </div>
+                        <div className="p-2">
+                          <Link
+                            to="/dashboard"
+                            onClick={() => setIsUserMenuOpen(false)}
+                            className="flex items-center gap-3 px-3 py-2 rounded-lg text-gray-300 
+                              hover:text-white hover:bg-white/5 transition-all"
+                          >
+                            <HiViewGrid className="w-4 h-4" />
+                            Dashboard
+                          </Link>
+                          <button
+                            onClick={handleLogout}
+                            className="flex items-center gap-3 px-3 py-2 w-full rounded-lg 
+                              text-red-400 hover:text-red-300 hover:bg-red-500/10 transition-all"
+                          >
+                            <HiLogout className="w-4 h-4" />
+                            Sign Out
+                          </button>
+                        </div>
+                      </motion.div>
+                    </>
+                  )}
+                </AnimatePresence>
+              </div>
+            ) : (
+              // Not logged in - show auth buttons
+              <>
                 <Link
                   to="/login"
                   className="text-gray-300 hover:text-white transition-colors duration-300 text-sm font-medium px-3 py-2"
@@ -106,22 +198,6 @@ const Navbar = () => {
                 </Link>
                 <Link to="/register" className="btn-primary text-sm py-2">
                   Get Started
-                </Link>
-              </>
-            ) : (
-              <>
-                <Link
-                  to="/verifier"
-                  className="flex items-center gap-2 btn-accent text-sm py-2"
-                >
-                  <HiShieldCheck className="w-4 h-4" />
-                  Verify
-                </Link>
-                <Link
-                  to="/dashboard"
-                  className="flex items-center gap-2 text-gray-300 hover:text-white px-3 py-2 rounded-lg hover:bg-white/5"
-                >
-                  <Logo className="w-6 h-6" />
                 </Link>
               </>
             )}
@@ -147,10 +223,24 @@ const Navbar = () => {
             className="md:hidden bg-dark-200/95 backdrop-blur-xl border-b border-white/10"
           >
             <div className="px-4 py-4 space-y-1">
+              {/* User Info (if logged in) */}
+              {isAuthenticated && (
+                <div className="pb-3 mb-3 border-b border-white/10 flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-primary-600 to-accent-600 
+                    flex items-center justify-center text-white font-bold">
+                    {getInitials(user?.name)}
+                  </div>
+                  <div>
+                    <p className="text-white font-medium">{user?.name}</p>
+                    <p className="text-gray-400 text-sm">{user?.email}</p>
+                  </div>
+                </div>
+              )}
+              
               {/* Quick Actions */}
               <div className="pb-3 mb-3 border-b border-white/10">
                 <Link
-                  to="/verifier"
+                  to="/verify"
                   onClick={() => setIsMobileMenuOpen(false)}
                   className="flex items-center gap-3 text-accent-400 hover:text-accent-300 py-3 px-3 rounded-lg hover:bg-accent-500/10"
                 >
@@ -159,8 +249,8 @@ const Navbar = () => {
                 </Link>
               </div>
               
-              {/* App Links */}
-              {appLinks.map((link) => (
+              {/* App Links (if authenticated) */}
+              {isAuthenticated && appLinks.map((link) => (
                 <Link
                   key={link.name}
                   to={link.href}
@@ -196,20 +286,32 @@ const Navbar = () => {
               
               {/* Auth Section */}
               <div className="pt-3 border-t border-white/10 space-y-2">
-                <Link
-                  to="/login"
-                  onClick={() => setIsMobileMenuOpen(false)}
-                  className="block text-center text-gray-300 hover:text-white py-2"
-                >
-                  Sign In
-                </Link>
-                <Link
-                  to="/register"
-                  onClick={() => setIsMobileMenuOpen(false)}
-                  className="block btn-primary text-center"
-                >
-                  Get Started
-                </Link>
+                {isAuthenticated ? (
+                  <button
+                    onClick={handleLogout}
+                    className="flex items-center justify-center gap-2 w-full text-red-400 hover:text-red-300 py-3 rounded-lg hover:bg-red-500/10"
+                  >
+                    <HiLogout className="w-5 h-5" />
+                    Sign Out
+                  </button>
+                ) : (
+                  <>
+                    <Link
+                      to="/login"
+                      onClick={() => setIsMobileMenuOpen(false)}
+                      className="block text-center text-gray-300 hover:text-white py-2"
+                    >
+                      Sign In
+                    </Link>
+                    <Link
+                      to="/register"
+                      onClick={() => setIsMobileMenuOpen(false)}
+                      className="block btn-primary text-center"
+                    >
+                      Get Started
+                    </Link>
+                  </>
+                )}
               </div>
             </div>
           </motion.div>

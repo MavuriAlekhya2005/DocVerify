@@ -14,6 +14,7 @@ import Logo from '../../components/Logo';
 import PortalSwitcher from '../../components/PortalSwitcher';
 import ThemeToggle from '../../components/ThemeToggle';
 import Breadcrumb from '../../components/Breadcrumb';
+import GlassNavIcon from '../../components/animations/GlassIcons/GlassNavIcon';
 import api from '../../services/api';
 
 const VerifierDashboard = () => {
@@ -38,32 +39,29 @@ const VerifierDashboard = () => {
   };
 
   return (
-    <div className="min-h-screen bg-dark-300 flex">
+    <div className="min-h-screen flex">
       {/* Sidebar - Desktop */}
-      <aside className="hidden lg:flex flex-col w-64 bg-dark-200 border-r border-white/10">
+      <aside className="hidden lg:flex flex-col w-64 glass-sidebar">
         <div className="p-6">
           <NavLink to="/" className="flex items-center gap-2">
             <Logo className="h-10 w-10" />
-            <span className="text-xl font-bold text-white font-display">DocVerify</span>
+            <span className="text-xl font-bold text-white font-display text-glow-sm">DocVerify</span>
           </NavLink>
-          <div className="mt-2 px-2 py-1 bg-accent-600/20 text-accent-400 text-xs font-medium rounded-md inline-block">
+          <div className="mt-2 px-2 py-1 bg-cyan-600/30 text-cyan-300 text-xs font-medium rounded-md inline-block neon-border">
             Verifier Portal
           </div>
         </div>
 
-        <nav className="flex-1 px-4 py-6 space-y-2">
+        <nav className="flex-1 px-4 py-6 space-y-1">
           {menuItems.map((item) => (
-            <NavLink
+            <GlassNavIcon
               key={item.path}
               to={item.path}
+              icon={item.icon}
+              label={item.name}
+              color="cyan"
               end={item.path === '/verifier'}
-              className={({ isActive }) =>
-                isActive ? 'sidebar-link-active' : 'sidebar-link'
-              }
-            >
-              <item.icon className="w-5 h-5" />
-              {item.name}
-            </NavLink>
+            />
           ))}
         </nav>
 
@@ -83,12 +81,12 @@ const VerifierDashboard = () => {
       {/* Mobile Sidebar */}
       {sidebarOpen && (
         <div className="lg:hidden fixed inset-0 z-50">
-          <div className="absolute inset-0 bg-black/60" onClick={() => setSidebarOpen(false)}></div>
-          <aside className="absolute left-0 top-0 bottom-0 w-64 bg-dark-200 border-r border-white/10">
+          <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setSidebarOpen(false)}></div>
+          <aside className="absolute left-0 top-0 bottom-0 w-64 glass-sidebar">
             <div className="p-6 flex items-center justify-between">
               <NavLink to="/" className="flex items-center gap-2">
                 <Logo className="h-10 w-10" />
-                <span className="text-xl font-bold text-white font-display">DocVerify</span>
+                <span className="text-xl font-bold text-white font-display text-glow-sm">DocVerify</span>
               </NavLink>
               <button 
                 onClick={() => setSidebarOpen(false)}
@@ -98,20 +96,17 @@ const VerifierDashboard = () => {
               </button>
             </div>
 
-            <nav className="px-4 py-6 space-y-2">
+            <nav className="px-4 py-6 space-y-1">
               {menuItems.map((item) => (
-                <NavLink
+                <GlassNavIcon
                   key={item.path}
                   to={item.path}
+                  icon={item.icon}
+                  label={item.name}
+                  color="cyan"
                   end={item.path === '/verifier'}
                   onClick={() => setSidebarOpen(false)}
-                  className={({ isActive }) =>
-                    isActive ? 'sidebar-link-active' : 'sidebar-link'
-                  }
-                >
-                  <item.icon className="w-5 h-5" />
-                  {item.name}
-                </NavLink>
+                />
               ))}
             </nav>
 
@@ -132,7 +127,7 @@ const VerifierDashboard = () => {
       {/* Main Content */}
       <div className="flex-1 flex flex-col">
         {/* Top Header */}
-        <header className="bg-dark-200/50 backdrop-blur-xl border-b border-white/10 px-6 py-4">
+        <header className="glass-header px-6 py-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-4">
               <button
@@ -142,7 +137,7 @@ const VerifierDashboard = () => {
                 <HiMenuAlt2 className="w-6 h-6" />
               </button>
               
-              <h1 className="text-white font-semibold hidden sm:block">Certificate Verification</h1>
+              <h1 className="text-white font-semibold hidden sm:block text-glow-sm">Certificate Verification</h1>
             </div>
 
             <div className="flex items-center gap-4">

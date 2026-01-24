@@ -1,0 +1,73 @@
+/* GlassCursor - Elegant glass-morphism cursor */
+
+/* Hide default cursor when glass cursor is active */
+.glass-cursor-active,
+.glass-cursor-active * {
+  cursor: none !important;
+}
+
+/* Main cursor ring */
+.glass-cursor {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 40px;
+  height: 40px;
+  pointer-events: none;
+  z-index: 99999;
+  mix-blend-mode: difference;
+}
+
+.glass-cursor__ring {
+  width: 100%;
+  height: 100%;
+  border: 2px solid rgba(255, 255, 255, 0.4);
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.03);
+  backdrop-filter: blur(2px);
+  -webkit-backdrop-filter: blur(2px);
+  box-shadow: 
+    0 0 10px rgba(139, 92, 246, 0.1),
+    inset 0 0 10px rgba(255, 255, 255, 0.05);
+  transition: border-color 0.3s ease;
+}
+
+/* Center dot */
+.glass-cursor__dot {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 6px;
+  height: 6px;
+  background: rgba(255, 255, 255, 0.9);
+  border-radius: 50%;
+  pointer-events: none;
+  z-index: 100000;
+  box-shadow: 0 0 10px rgba(255, 255, 255, 0.5);
+}
+
+/* Responsive - hide on touch devices */
+@media (hover: none) and (pointer: coarse) {
+  .glass-cursor,
+  .glass-cursor__dot {
+    display: none !important;
+  }
+  
+  .glass-cursor-active,
+  .glass-cursor-active * {
+    cursor: auto !important;
+  }
+}
+
+/* Reduce motion preference */
+@media (prefers-reduced-motion: reduce) {
+  .glass-cursor,
+  .glass-cursor__dot {
+    display: none !important;
+  }
+  
+  .glass-cursor-active,
+  .glass-cursor-active * {
+    cursor: auto !important;
+  }
+}

@@ -19,6 +19,7 @@ import Footer from '../components/Footer';
 import FeatureCard from '../components/FeatureCard';
 import StepCard from '../components/StepCard';
 import StatCard from '../components/StatCard';
+import SplitText from '../components/animations/SplitText/SplitText';
 
 const LandingPage = () => {
   const features = [
@@ -89,34 +90,41 @@ const LandingPage = () => {
   ];
 
   return (
-    <div className="min-h-screen bg-dark-300">
+    <div className="min-h-screen">
       <Navbar />
       
       {/* Hero Section */}
       <section className="relative min-h-screen flex items-center justify-center overflow-hidden pt-20">
-        {/* Background Effects */}
-        <div className="absolute inset-0 overflow-hidden">
-          <div className="absolute top-1/4 left-1/4 w-96 h-96 bg-primary-600/20 rounded-full blur-3xl animate-float"></div>
-          <div className="absolute bottom-1/4 right-1/4 w-96 h-96 bg-accent-600/20 rounded-full blur-3xl animate-float animation-delay-2000"></div>
-          <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[800px] h-[800px] 
-            bg-gradient-to-r from-primary-600/10 to-accent-600/10 rounded-full blur-3xl"></div>
-        </div>
-
-        {/* Grid Pattern */}
+        {/* Grid Pattern Overlay */}
         <div className="absolute inset-0 bg-[linear-gradient(rgba(99,102,241,0.03)_1px,transparent_1px),linear-gradient(90deg,rgba(99,102,241,0.03)_1px,transparent_1px)] bg-[size:100px_100px]"></div>
 
         <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-20">
           <div className="text-center">
-            <motion.h1
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
               transition={{ duration: 0.6, delay: 0.1 }}
-              className="text-5xl md:text-7xl font-bold text-white font-display mb-6 leading-tight"
+              className="mb-6"
             >
-              Secure Document
-              <br />
-              <span className="gradient-text">Verification System</span>
-            </motion.h1>
+              <SplitText
+                text="Secure Document"
+                className="text-5xl md:text-7xl font-bold text-white font-display leading-tight block neon-text"
+                delay={50}
+                animationFrom={{ opacity: 0, transform: 'translate3d(0,50px,0)' }}
+                animationTo={{ opacity: 1, transform: 'translate3d(0,0,0)' }}
+                easing="easeOutCubic"
+                threshold={0.2}
+              />
+              <SplitText
+                text="Verification System"
+                className="text-5xl md:text-7xl font-bold gradient-text-glow font-display leading-tight block mt-2"
+                delay={50}
+                animationFrom={{ opacity: 0, transform: 'translate3d(0,50px,0)' }}
+                animationTo={{ opacity: 1, transform: 'translate3d(0,0,0)' }}
+                easing="easeOutCubic"
+                threshold={0.2}
+              />
+            </motion.div>
 
             <motion.p
               initial={{ opacity: 0, y: 20 }}
@@ -150,22 +158,22 @@ const LandingPage = () => {
               className="mt-20 relative"
             >
               <div className="relative mx-auto max-w-4xl">
-                <div className="absolute inset-0 bg-gradient-to-t from-dark-300 via-transparent to-transparent z-10"></div>
-                <div className="bg-dark-100/50 backdrop-blur-xl border border-white/10 rounded-2xl p-8 shadow-2xl">
+                <div className="absolute inset-0 bg-gradient-to-t from-transparent via-transparent to-transparent z-10"></div>
+                <div className="glass-container rounded-2xl p-8 shadow-2xl neon-border">
                   <div className="flex items-center gap-4 mb-6">
                     <div className="flex gap-2">
-                      <div className="w-3 h-3 rounded-full bg-red-500"></div>
-                      <div className="w-3 h-3 rounded-full bg-yellow-500"></div>
-                      <div className="w-3 h-3 rounded-full bg-green-500"></div>
+                      <div className="w-3 h-3 rounded-full bg-red-500 shadow-lg shadow-red-500/50"></div>
+                      <div className="w-3 h-3 rounded-full bg-yellow-500 shadow-lg shadow-yellow-500/50"></div>
+                      <div className="w-3 h-3 rounded-full bg-green-500 shadow-lg shadow-green-500/50"></div>
                     </div>
-                    <div className="flex-1 h-8 bg-dark-200/50 rounded-lg"></div>
+                    <div className="flex-1 h-8 glass-container-light rounded-lg"></div>
                   </div>
                   
                   <div className="grid grid-cols-3 gap-4">
                     {/* Certificate Preview */}
-                    <div className="col-span-2 bg-white/5 rounded-xl p-6 border border-white/10">
+                    <div className="col-span-2 glass-card p-6">
                       <div className="flex items-center gap-4 mb-4">
-                        <div className="w-12 h-12 rounded-lg bg-gradient-to-br from-primary-600 to-accent-600"></div>
+                        <div className="w-12 h-12 rounded-lg bg-gradient-to-br from-primary-600 to-accent-600 shadow-lg shadow-primary-500/30"></div>
                         <div>
                           <div className="h-4 w-32 bg-white/20 rounded mb-2"></div>
                           <div className="h-3 w-24 bg-white/10 rounded"></div>
@@ -178,10 +186,10 @@ const LandingPage = () => {
                       </div>
                       <div className="mt-6 flex items-center justify-between">
                         <div className="flex items-center gap-2">
-                          <HiCheckCircle className="w-6 h-6 text-accent-500" />
-                          <span className="text-accent-400 font-medium">Verified</span>
+                          <HiCheckCircle className="w-6 h-6 text-accent-400 text-glow-cyan" />
+                          <span className="text-accent-300 font-medium text-glow-sm">Verified</span>
                         </div>
-                        <div className="w-16 h-16 bg-white rounded-lg p-2">
+                        <div className="w-16 h-16 bg-white/90 rounded-lg p-2 shadow-lg">
                           <div className="w-full h-full bg-dark-200 rounded"></div>
                         </div>
                       </div>
@@ -189,7 +197,7 @@ const LandingPage = () => {
 
                     {/* Stats Panel */}
                     <div className="space-y-4">
-                      <div className="bg-white/5 rounded-xl p-4 border border-white/10">
+                      <div className="glass-card p-4">
                         <HiShieldCheck className="w-8 h-8 text-accent-500 mb-2" />
                         <div className="text-2xl font-bold text-white">99.8%</div>
                         <div className="text-sm text-gray-400">Accuracy</div>
