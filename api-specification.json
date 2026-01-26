@@ -1,0 +1,267 @@
+{
+  "openapi": "3.0.0",
+  "info": {
+    "title": "DocVerify API",
+    "version": "1.0.0",
+    "description": "Blockchain-based document verification system API"
+  },
+  "servers": [
+    {
+      "url": "http://localhost:5000/api",
+      "description": "Development server"
+    }
+  ],
+  "security": [
+    {
+      "bearerAuth": []
+    }
+  ],
+  "paths": {
+    "/auth/register": {
+      "post": {
+        "summary": "Register a new user",
+        "tags": ["Authentication"],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["name", "email", "password"],
+                "properties": {
+                  "name": {"type": "string", "example": "John Doe"},
+                  "email": {"type": "string", "format": "email", "example": "john@example.com"},
+                  "password": {"type": "string", "minLength": 6, "example": "password123"},
+                  "role": {"type": "string", "enum": ["user", "admin"], "default": "user"}
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {"description": "User created successfully"},
+          "400": {"description": "Validation error"},
+          "429": {"description": "Rate limited"}
+        }
+      }
+    },
+    "/auth/login": {
+      "post": {
+        "summary": "User login",
+        "tags": ["Authentication"],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["email", "password"],
+                "properties": {
+                  "email": {"type": "string", "format": "email"},
+                  "password": {"type": "string"}
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {"description": "Login successful, returns JWT token"},
+          "401": {"description": "Invalid credentials"},
+          "429": {"description": "Rate limited"}
+        }
+      }
+    },
+    "/auth/me": {
+      "get": {
+        "summary": "Get current user profile",
+        "tags": ["Authentication"],
+        "security": [{"bearerAuth": []}],
+        "responses": {
+          "200": {"description": "User profile data"},
+          "401": {"description": "Unauthorized"}
+        }
+      }
+    },
+    "/certificates": {
+      "get": {
+        "summary": "Get all certificates",
+        "tags": ["Certificates"],
+        "parameters": [
+          {"name": "page", "in": "query", "schema": {"type": "integer", "default": 1}},
+          {"name": "limit", "in": "query", "schema": {"type": "integer", "default": 10}},
+          {"name": "search", "in": "query", "schema": {"type": "string"}}
+        ],
+        "responses": {
+          "200": {"description": "List of certificates"}
+        }
+      },
+      "post": {
+        "summary": "Issue new certificate",
+        "tags": ["Certificates"],
+        "security": [{"bearerAuth": []}],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["title", "recipientName", "recipientEmail"],
+                "properties": {
+                  "title": {"type": "string"},
+                  "recipientName": {"type": "string"},
+                  "recipientEmail": {"type": "string", "format": "email"},
+                  "documentType": {"type": "string"},
+                  "fields": {"type": "object"},
+                  "canvasData": {"type": "object"}
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {"description": "Certificate created"},
+          "401": {"description": "Unauthorized"}
+        }
+      }
+    },
+    "/certificates/{id}": {
+      "get": {
+        "summary": "Get certificate by ID",
+        "tags": ["Certificates"],
+        "parameters": [
+          {"name": "id", "in": "path", "required": true, "schema": {"type": "string"}}
+        ],
+        "responses": {
+          "200": {"description": "Certificate data"},
+          "404": {"description": "Certificate not found"}
+        }
+      },
+      "delete": {
+        "summary": "Delete certificate",
+        "tags": ["Certificates"],
+        "security": [{"bearerAuth": []}],
+        "parameters": [
+          {"name": "id", "in": "path", "required": true, "schema": {"type": "string"}}
+        ],
+        "responses": {
+          "200": {"description": "Certificate deleted"},
+          "401": {"description": "Unauthorized"},
+          "404": {"description": "Certificate not found"}
+        }
+      }
+    },
+    "/verify": {
+      "post": {
+        "summary": "Verify document authenticity",
+        "tags": ["Verification"],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["documentId"],
+                "properties": {
+                  "documentId": {"type": "string"},
+                  "verificationType": {"type": "string", "enum": ["quick", "full"], "default": "full"}
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {"description": "Verification result"},
+          "404": {"description": "Document not found"},
+          "429": {"description": "Rate limited"}
+        }
+      }
+    },
+    "/upload": {
+      "post": {
+        "summary": "Upload document file",
+        "tags": ["Upload"],
+        "security": [{"bearerAuth": []}],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "document": {
+                    "type": "string",
+                    "format": "binary",
+                    "description": "Document file (PDF, JPG, PNG, DOC, DOCX)"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {"description": "File uploaded successfully"},
+          "400": {"description": "Invalid file"},
+          "401": {"description": "Unauthorized"}
+        }
+      }
+    },
+    "/admin/users": {
+      "get": {
+        "summary": "Get all users (Admin only)",
+        "tags": ["Admin"],
+        "security": [{"bearerAuth": []}],
+        "responses": {
+          "200": {"description": "List of users"},
+          "401": {"description": "Unauthorized"},
+          "403": {"description": "Forbidden - Admin access required"}
+        }
+      }
+    },
+    "/health": {
+      "get": {
+        "summary": "Health check endpoint",
+        "tags": ["System"],
+        "responses": {
+          "200": {"description": "Service is healthy"}
+        }
+      }
+    },
+    "/ai/extract": {
+      "post": {
+        "summary": "Extract data from document using AI",
+        "tags": ["AI"],
+        "security": [{"bearerAuth": []}],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["documentId"],
+                "properties": {
+                  "documentId": {"type": "string"},
+                  "extractionType": {"type": "string", "enum": ["text", "fields"], "default": "text"}
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {"description": "Extracted data"},
+          "401": {"description": "Unauthorized"},
+          "429": {"description": "Rate limited"}
+        }
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "bearerAuth": {
+        "type": "http",
+        "scheme": "bearer",
+        "bearerFormat": "JWT"
+      }
+    }
+  }
+}</content>
+<parameter name="filePath">e:\Final Year Project\DocVerify\api-specification.json
