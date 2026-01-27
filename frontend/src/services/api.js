@@ -4,40 +4,93 @@ const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
 // Session timeout in milliseconds (30 minutes)
 const SESSION_TIMEOUT = 30 * 60 * 1000;
 
-// Update last activity timestamp
-const updateLastActivity = () => {
-  localStorage.setItem('lastActivity', Date.now().toString());
+// Account management
+const MAX_ACCOUNTS = 5;
+const ACTIVE_ACCOUNT_KEY = 'activeAccountId';
+
+// Get all stored accounts
+const getStoredAccounts = () => {
+  const accounts = [];
+  for (let i = 0; i < localStorage.length; i++) {
+    const key = localStorage.key(i);
+    if (key && key.startsWith('account_')) {
+      const accountId = key.replace('account_', '');
+      try {
+        const accountData = JSON.parse(localStorage.getItem(key));
+        accounts.push({ id: accountId, ...accountData });
+      } catch (e) {
+        // Invalid data, skip
+      }
+    }
+  }
+  return accounts;
 };
 
-// Check if session has expired
-const isSessionExpired = () => {
-  const lastActivity = localStorage.getItem('lastActivity');
-  if (!lastActivity) return false;
+// Get active account
+const getActiveAccount = () => {
+  const activeId = localStorage.getItem(ACTIVE_ACCOUNT_KEY);
+  if (!activeId) return null;
   
-  const timeSinceLastActivity = Date.now() - parseInt(lastActivity, 10);
+  const accountKey = `account_${activeId}`;
+  const accountData = localStorage.getItem(accountKey);
+  return accountData ? JSON.parse(accountData) : null;
+};
+
+// Set active account
+const setActiveAccount = (accountId) => {
+  localStorage.setItem(ACTIVE_ACCOUNT_KEY, accountId);
+};
+
+// Update last activity for specific account
+const updateLastActivity = (accountId) => {
+  const accountKey = `account_${accountId}`;
+  const accountData = localStorage.getItem(accountKey);
+  if (accountData) {
+    const account = JSON.parse(accountData);
+    account.lastActivity = Date.now();
+    localStorage.setItem(accountKey, JSON.stringify(account));
+  }
+};
+
+// Check if account session has expired
+const isAccountSessionExpired = (account) => {
+  if (!account || !account.lastActivity) return true;
+  const timeSinceLastActivity = Date.now() - account.lastActivity;
   return timeSinceLastActivity > SESSION_TIMEOUT;
 };
 
-// Clear session data
-const clearSession = () => {
-  localStorage.removeItem('token');
-  localStorage.removeItem('user');
-  localStorage.removeItem('lastActivity');
+// Clear specific account session
+const clearAccountSession = (accountId) => {
+  localStorage.removeItem(`account_${accountId}`);
+  const activeId = localStorage.getItem(ACTIVE_ACCOUNT_KEY);
+  if (activeId === accountId) {
+    localStorage.removeItem(ACTIVE_ACCOUNT_KEY);
+  }
+};
+
+// Clear all sessions
+const clearAllSessions = () => {
+  const accounts = getStoredAccounts();
+  accounts.forEach(account => {
+    localStorage.removeItem(`account_${account.id}`);
+  });
+  localStorage.removeItem(ACTIVE_ACCOUNT_KEY);
 };
 
 // Helper to get auth headers
 const getAuthHeaders = () => {
-  // Check for session expiry before returning headers
-  if (isSessionExpired()) {
-    clearSession();
+  const activeAccount = getActiveAccount();
+  if (!activeAccount || isAccountSessionExpired(activeAccount)) {
+    if (activeAccount) {
+      clearAccountSession(activeAccount.id);
+    }
     return {};
   }
   
-  const token = localStorage.getItem('token');
-  if (token) {
-    updateLastActivity(); // Update activity on each authenticated request
+  if (activeAccount.token) {
+    updateLastActivity(activeAccount.id); // Update activity on each authenticated request
   }
-  return token ? { 'Authorization': `Bearer ${token}` } : {};
+  return activeAccount.token ? { 'Authorization': `Bearer ${activeAccount.token}` } : {};
 };
 
 // Helper for handling API responses with better error handling
@@ -80,20 +133,23 @@ export const api = {
   
   // Check and handle session timeout
   checkSession: () => {
-    if (isSessionExpired()) {
-      clearSession();
+    const activeAccount = getActiveAccount();
+    if (!activeAccount || isAccountSessionExpired(activeAccount)) {
+      if (activeAccount) {
+        clearAccountSession(activeAccount.id);
+      }
       return false;
     }
-    updateLastActivity();
+    updateLastActivity(activeAccount.id);
     return true;
   },
   
   // Get time remaining in session (in seconds)
   getSessionTimeRemaining: () => {
-    const lastActivity = localStorage.getItem('lastActivity');
-    if (!lastActivity) return SESSION_TIMEOUT / 1000;
+    const activeAccount = getActiveAccount();
+    if (!activeAccount || !activeAccount.lastActivity) return SESSION_TIMEOUT / 1000;
     
-    const timeSinceLastActivity = Date.now() - parseInt(lastActivity, 10);
+    const timeSinceLastActivity = Date.now() - activeAccount.lastActivity;
     const remaining = Math.max(0, SESSION_TIMEOUT - timeSinceLastActivity);
     return Math.floor(remaining / 1000);
   },
@@ -141,9 +197,32 @@ export const api = {
     });
     const data = await response.json();
     if (data.success && data.data.token) {
-      localStorage.setItem('token', data.data.token);
-      localStorage.setItem('user', JSON.stringify(data.data.user));
-      updateLastActivity(); // Set initial activity timestamp
+      const accountId = data.data.user.id || data.data.user.email;
+      const accountData = {
+        id: accountId,
+        token: data.data.token,
+        user: data.data.user,
+        lastActivity: Date.now()
+      };
+      
+      // Check if we already have this account
+      const existingAccounts = getStoredAccounts();
+      const existingAccount = existingAccounts.find(acc => acc.user.email === data.data.user.email);
+      
+      if (existingAccount) {
+        // Update existing account
+        localStorage.setItem(`account_${existingAccount.id}`, JSON.stringify(accountData));
+        setActiveAccount(existingAccount.id);
+      } else if (existingAccounts.length < MAX_ACCOUNTS) {
+        // Add new account
+        localStorage.setItem(`account_${accountId}`, JSON.stringify(accountData));
+        setActiveAccount(accountId);
+      } else {
+        // Max accounts reached, replace oldest
+        const oldestAccount = existingAccounts.sort((a, b) => a.lastActivity - b.lastActivity)[0];
+        localStorage.setItem(`account_${oldestAccount.id}`, JSON.stringify(accountData));
+        setActiveAccount(oldestAccount.id);
+      }
     }
     return data;
   },
@@ -157,37 +236,86 @@ export const api = {
     });
     const data = await response.json();
     if (data.success && data.data.token) {
-      localStorage.setItem('token', data.data.token);
-      localStorage.setItem('user', JSON.stringify(data.data.user));
-      updateLastActivity(); // Set initial activity timestamp
+      const accountId = data.data.user.id || data.data.user.email;
+      const accountData = {
+        id: accountId,
+        token: data.data.token,
+        user: data.data.user,
+        lastActivity: Date.now()
+      };
+      
+      // Check if we already have this account
+      const existingAccounts = getStoredAccounts();
+      const existingAccount = existingAccounts.find(acc => acc.user.email === data.data.user.email);
+      
+      if (existingAccount) {
+        // Update existing account
+        localStorage.setItem(`account_${existingAccount.id}`, JSON.stringify(accountData));
+        setActiveAccount(existingAccount.id);
+      } else if (existingAccounts.length < MAX_ACCOUNTS) {
+        // Add new account
+        localStorage.setItem(`account_${accountId}`, JSON.stringify(accountData));
+        setActiveAccount(accountId);
+      } else {
+        // Max accounts reached, replace oldest
+        const oldestAccount = existingAccounts.sort((a, b) => a.lastActivity - b.lastActivity)[0];
+        localStorage.setItem(`account_${oldestAccount.id}`, JSON.stringify(accountData));
+        setActiveAccount(oldestAccount.id);
+      }
     }
     return data;
   },
 
-  // Logout user
+  // Logout current account
   logout: () => {
-    clearSession();
+    const activeAccount = getActiveAccount();
+    if (activeAccount) {
+      clearAccountSession(activeAccount.id);
+    }
+  },
+
+  // Logout all accounts
+  logoutAll: () => {
+    clearAllSessions();
   },
 
   // Get current user
   getCurrentUser: () => {
-    // Check session before returning user
-    if (isSessionExpired()) {
-      clearSession();
+    const activeAccount = getActiveAccount();
+    if (!activeAccount || isAccountSessionExpired(activeAccount)) {
+      if (activeAccount) {
+        clearAccountSession(activeAccount.id);
+      }
       return null;
     }
-    const user = localStorage.getItem('user');
-    return user ? JSON.parse(user) : null;
+    return activeAccount.user;
   },
 
   // Check if user is logged in
   isAuthenticated: () => {
-    // Check session expiry
-    if (isSessionExpired()) {
-      clearSession();
-      return false;
+    const activeAccount = getActiveAccount();
+    return !!(activeAccount && !isAccountSessionExpired(activeAccount));
+  },
+
+  // Get all stored accounts
+  getStoredAccounts: () => {
+    return getStoredAccounts().filter(account => !isAccountSessionExpired(account));
+  },
+
+  // Switch to different account
+  switchAccount: (accountId) => {
+    const accounts = getStoredAccounts();
+    const account = accounts.find(acc => acc.id === accountId);
+    if (account && !isAccountSessionExpired(account)) {
+      setActiveAccount(accountId);
+      return true;
     }
-    return !!localStorage.getItem('token');
+    return false;
+  },
+
+  // Remove account
+  removeAccount: (accountId) => {
+    clearAccountSession(accountId);
   },
 
   // Get user from server

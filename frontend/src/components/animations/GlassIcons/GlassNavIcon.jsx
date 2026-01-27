@@ -1,5 +1,4 @@
 import { NavLink } from 'react-router-dom';
-import { useTheme } from '../../../contexts/ThemeContext';
 import './GlassIcons.css';
 
 const gradientMapping = {
@@ -17,7 +16,6 @@ const gradientMapping = {
 /**
  * GlassNavIcon - Single navigation item with glass morphism effect
  * Designed for sidebar navigation links with collapsed state support
- * Theme-aware: adapts to light/dark mode
  */
 const GlassNavIcon = ({ 
   to, 
@@ -29,8 +27,6 @@ const GlassNavIcon = ({
   collapsed = false,
   end = false
 }) => {
-  const { isDark } = useTheme();
-  
   const getBackgroundStyle = () => {
     if (gradientMapping[color]) {
       return { background: gradientMapping[color] };
@@ -48,12 +44,8 @@ const GlassNavIcon = ({
         transition-all duration-300 relative overflow-hidden
         ${collapsed ? 'px-3 py-3 justify-center' : 'px-3 py-2.5'}
         ${navActive || isActive 
-          ? isDark 
-            ? 'bg-primary-600/20 text-white shadow-lg shadow-primary-500/20' 
-            : 'bg-primary-100 text-primary-700 shadow-lg shadow-primary-500/10'
-          : isDark 
-            ? 'text-gray-300 hover:text-white hover:bg-white/5' 
-            : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'
+          ? 'bg-primary-600/20 text-white shadow-lg shadow-primary-500/20' 
+          : 'text-gray-300 hover:text-white hover:bg-white/5'
         }
       `}
     >
@@ -74,12 +66,8 @@ const GlassNavIcon = ({
             glass-nav-icon__icon relative z-10 p-1.5 rounded-lg
             transition-all duration-300
             ${navActive || isActive 
-              ? isDark 
-                ? 'bg-primary-600/30 shadow-inner' 
-                : 'bg-primary-200/50 shadow-inner'
-              : isDark 
-                ? 'group-hover:bg-white/10' 
-                : 'group-hover:bg-gray-200/50'
+              ? 'bg-primary-600/30 shadow-inner' 
+              : 'group-hover:bg-white/10'
             }
           `}>
             <Icon className="w-5 h-5" />
@@ -100,14 +88,14 @@ const GlassNavIcon = ({
           {/* Active indicator */}
           {(navActive || isActive) && !collapsed && (
             <span className={`absolute right-0 top-1/2 -translate-y-1/2 w-1 h-8 rounded-l-full
-              ${isDark ? 'bg-primary-500' : 'bg-primary-600'}
+              bg-primary-500
             `} />
           )}
           
           {/* Active dot for collapsed state */}
           {(navActive || isActive) && collapsed && (
             <span className={`absolute bottom-1 left-1/2 -translate-x-1/2 w-1.5 h-1.5 rounded-full
-              ${isDark ? 'bg-primary-500' : 'bg-primary-600'}
+              bg-primary-500
             `} />
           )}
         </>

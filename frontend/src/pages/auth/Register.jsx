@@ -1,12 +1,13 @@
 import { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { HiMail, HiLockClosed, HiEye, HiEyeOff, HiUser, HiOfficeBuilding, HiShieldCheck } from 'react-icons/hi';
+import { HiMail, HiLockClosed, HiEye, HiEyeOff, HiUser, HiOfficeBuilding, HiShieldCheck, HiArrowLeft } from 'react-icons/hi';
 import { FcGoogle } from 'react-icons/fc';
 import { FaGithub } from 'react-icons/fa';
 import toast from 'react-hot-toast';
 import Logo from '../../components/Logo';
 import api from '../../services/api';
+import GlobalBackground from '../../components/animations/GlobalBackground/GlobalBackground';
 
 const Register = () => {
   const navigate = useNavigate();
@@ -22,7 +23,7 @@ const Register = () => {
   });
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
-  
+
   // OTP states
   const [step, setStep] = useState(1); // 1: form, 2: OTP verification
   const [otp, setOtp] = useState(['', '', '', '', '', '']);
@@ -67,7 +68,7 @@ const Register = () => {
     e.preventDefault();
     const pastedData = e.clipboardData.getData('text').slice(0, 6);
     if (!/^\d+$/.test(pastedData)) return;
-    
+
     const newOtp = pastedData.split('').concat(Array(6).fill('')).slice(0, 6);
     setOtp(newOtp);
   };
@@ -90,10 +91,7 @@ const Register = () => {
     setError('');
 
     try {
-      console.log('Sending OTP to:', formData.email);
       const result = await api.sendOTP(formData.email, 'registration');
-      console.log('OTP API Response:', result);
-      
       if (result.success) {
         toast.success('OTP sent to your email!');
         setStep(2);
@@ -103,7 +101,6 @@ const Register = () => {
         toast.error(result.message || 'Failed to send OTP');
       }
     } catch (err) {
-      console.error('OTP Send Error:', err);
       setError('Failed to send OTP. Please try again.');
       toast.error('Failed to send OTP');
     } finally {
@@ -192,37 +189,33 @@ const Register = () => {
     await sendOTP();
   };
 
+  const handleSocialRegister = (provider) => {
+    // Redirect to backend OAuth
+    window.location.href = `http://localhost:5000/api/auth/${provider}`;
+  };
+
   return (
-    <div className="min-h-screen bg-dark-300 flex">
-      {/* Left Side - Visual (Fixed) */}
-      <div className="hidden lg:flex flex-1 relative overflow-hidden sticky top-0 h-screen">
-        <div className="absolute inset-0 bg-gradient-to-br from-primary-600/20 to-accent-600/20"></div>
+    <div className="min-h-screen bg-transparent flex">
+      <GlobalBackground />
+      {/* Left Side - Branding */}
+      <div className="hidden lg:flex flex-1 relative overflow-hidden">
+        <div className="absolute inset-0 bg-gradient-to-br from-primary-600/10 to-accent-600/10"></div>
         <div className="absolute inset-0 bg-[linear-gradient(rgba(99,102,241,0.05)_1px,transparent_1px),linear-gradient(90deg,rgba(99,102,241,0.05)_1px,transparent_1px)] bg-[size:50px_50px]"></div>
-        
+
         <div className="relative z-10 flex items-center justify-center p-12">
           <div className="max-w-lg">
-            <h2 className="text-4xl font-bold text-white font-display mb-6">
-              Start Securing Your
-              <span className="gradient-text"> Documents Today</span>
-            </h2>
-            <p className="text-gray-400 mb-8">
-              Use DocVerify to issue tamper-proof, 
-              blockchain-verified documents with AI forgery detection.
-            </p>
+            <Link to="/" className="flex items-center gap-2 mb-8">
+              <Logo className="h-12 w-12" />
+              <span className="text-2xl font-bold text-white font-display">DocVerify</span>
+            </Link>
 
-            <div className="grid grid-cols-2 gap-4">
-              {[
-                { value: '10M+', label: 'Documents' },
-                { value: '5000+', label: 'Institutions' },
-                { value: '99.9%', label: 'Accuracy' },
-                { value: '<2s', label: 'Verification' },
-              ].map((stat, index) => (
-                <div key={index} className="bg-dark-100/50 backdrop-blur-xl rounded-xl border border-white/10 p-4 text-center">
-                  <div className="text-2xl font-bold text-white">{stat.value}</div>
-                  <div className="text-gray-400 text-sm">{stat.label}</div>
-                </div>
-              ))}
-            </div>
+            <h2 className="text-4xl font-bold text-white font-display mb-6">
+              Join DocVerify for
+              <span className="gradient-text block">Secure Documents</span>
+            </h2>
+            <p className="text-gray-400">
+              Create your account and start securing your important documents with blockchain technology.
+            </p>
           </div>
         </div>
 
@@ -238,15 +231,18 @@ const Register = () => {
           animate={{ opacity: 1, x: 0 }}
           className="w-full max-w-md py-8"
         >
-          <Link to="/" className="flex items-center gap-2 mb-12">
-            <Logo className="h-10 w-10" />
-            <span className="text-xl font-bold text-white font-display">DocVerify</span>
+          {/* Back to Home */}
+          <Link to="/" className="flex items-center gap-2 text-gray-400 hover:text-white mb-8 transition-colors">
+            <HiArrowLeft className="w-5 h-5" />
+            Back to Home
           </Link>
 
           {step === 1 ? (
             <>
-              <h1 className="text-3xl font-bold text-white mb-2">Create an account</h1>
-              <p className="text-gray-400 mb-8">Get started with your free account</p>
+              <div className="text-center mb-8">
+                <h1 className="text-3xl font-bold text-white mb-2">Create Account</h1>
+                <p className="text-gray-400">Get started with your free account</p>
+              </div>
 
               {/* Error Message */}
               {error && (
@@ -255,24 +251,24 @@ const Register = () => {
                 </div>
               )}
 
-              {/* Social Login */}
+              {/* Social Register */}
               <div className="grid grid-cols-2 gap-4 mb-8">
-                <a 
-                  href="http://localhost:5000/api/auth/google"
-                  className="flex items-center justify-center gap-3 py-3 px-4 bg-white/5 
+                <button
+                  onClick={() => handleSocialRegister('google')}
+                  className="flex items-center justify-center gap-3 py-3 px-4 bg-white/5
                     border border-white/10 rounded-xl text-white hover:bg-white/10 transition-all"
                 >
                   <FcGoogle size={20} />
                   <span className="text-sm font-medium">Google</span>
-                </a>
-                <a 
-                  href="http://localhost:5000/api/auth/github"
-                  className="flex items-center justify-center gap-3 py-3 px-4 bg-white/5 
+                </button>
+                <button
+                  onClick={() => handleSocialRegister('github')}
+                  className="flex items-center justify-center gap-3 py-3 px-4 bg-white/5
                     border border-white/10 rounded-xl text-white hover:bg-white/10 transition-all"
                 >
                   <FaGithub size={20} />
                   <span className="text-sm font-medium">GitHub</span>
-                </a>
+                </button>
               </div>
 
               <div className="flex items-center gap-4 mb-8">
@@ -319,136 +315,136 @@ const Register = () => {
                 </div>
 
                 <div>
-              <label className="block text-sm font-medium text-gray-300 mb-2">
-                Account Type
-              </label>
-              <div className="grid grid-cols-3 gap-3">
-                {[
-                  { value: 'user', label: 'Individual' },
-                  { value: 'institution', label: 'Institution' },
-                  { value: 'verifier', label: 'Verifier' },
-                ].map((role) => (
-                  <button
-                    key={role.value}
-                    type="button"
-                    onClick={() => setFormData(prev => ({ ...prev, role: role.value }))}
-                    className={`py-2.5 px-4 rounded-xl text-sm font-medium transition-all ${
-                      formData.role === role.value
-                        ? 'bg-primary-600 text-white'
-                        : 'bg-white/5 text-gray-400 border border-white/10 hover:border-primary-500/50'
-                    }`}
-                  >
-                    {role.label}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            {formData.role === 'institution' && (
-              <div>
-                <label className="block text-sm font-medium text-gray-300 mb-2">
-                  Organization Name
-                </label>
-                <div className="relative">
-                  <HiOfficeBuilding className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 w-5 h-5" />
-                  <input
-                    type="text"
-                    name="organization"
-                    value={formData.organization}
-                    onChange={handleChange}
-                    placeholder="Enter organization name"
-                    className="input-field-dark pl-12"
-                  />
+                  <label className="block text-sm font-medium text-gray-300 mb-2">
+                    Account Type
+                  </label>
+                  <div className="grid grid-cols-3 gap-3">
+                    {[
+                      { value: 'user', label: 'Individual' },
+                      { value: 'institution', label: 'Institution' },
+                      { value: 'verifier', label: 'Verifier' },
+                    ].map((role) => (
+                      <button
+                        key={role.value}
+                        type="button"
+                        onClick={() => setFormData(prev => ({ ...prev, role: role.value }))}
+                        className={`py-2.5 px-4 rounded-xl text-sm font-medium transition-all ${
+                          formData.role === role.value
+                            ? 'bg-primary-600 text-white'
+                            : 'bg-white/5 text-gray-400 border border-white/10 hover:border-primary-500/50'
+                        }`}
+                      >
+                        {role.label}
+                      </button>
+                    ))}
+                  </div>
                 </div>
-              </div>
-            )}
 
-            <div>
-              <label className="block text-sm font-medium text-gray-300 mb-2">
-                Password
-              </label>
-              <div className="relative">
-                <HiLockClosed className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 w-5 h-5" />
-                <input
-                  type={showPassword ? 'text' : 'password'}
-                  name="password"
-                  value={formData.password}
-                  onChange={handleChange}
-                  placeholder="Create a password"
-                  className="input-field-dark pl-12 pr-12"
-                  required
-                />
+                {formData.role === 'institution' && (
+                  <div>
+                    <label className="block text-sm font-medium text-gray-300 mb-2">
+                      Organization Name
+                    </label>
+                    <div className="relative">
+                      <HiOfficeBuilding className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 w-5 h-5" />
+                      <input
+                        type="text"
+                        name="organization"
+                        value={formData.organization}
+                        onChange={handleChange}
+                        placeholder="Enter organization name"
+                        className="input-field-dark pl-12"
+                      />
+                    </div>
+                  </div>
+                )}
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-300 mb-2">
+                    Password
+                  </label>
+                  <div className="relative">
+                    <HiLockClosed className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 w-5 h-5" />
+                    <input
+                      type={showPassword ? 'text' : 'password'}
+                      name="password"
+                      value={formData.password}
+                      onChange={handleChange}
+                      placeholder="Create a password"
+                      className="input-field-dark pl-12 pr-12"
+                      required
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowPassword(!showPassword)}
+                      className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 hover:text-white"
+                    >
+                      {showPassword ? <HiEyeOff className="w-5 h-5" /> : <HiEye className="w-5 h-5" />}
+                    </button>
+                  </div>
+                  <p className="mt-2 text-xs text-gray-500">
+                    Must be at least 8 characters long
+                  </p>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-300 mb-2">
+                    Confirm Password
+                  </label>
+                  <div className="relative">
+                    <HiLockClosed className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 w-5 h-5" />
+                    <input
+                      type={showPassword ? 'text' : 'password'}
+                      name="confirmPassword"
+                      value={formData.confirmPassword}
+                      onChange={handleChange}
+                      placeholder="Confirm your password"
+                      className="input-field-dark pl-12"
+                      required
+                    />
+                  </div>
+                </div>
+
+                <div className="flex items-start gap-3">
+                  <input
+                    type="checkbox"
+                    name="agreeTerms"
+                    checked={formData.agreeTerms}
+                    onChange={handleChange}
+                    className="w-4 h-4 mt-1 rounded border-white/20 bg-white/5 text-primary-600
+                      focus:ring-primary-500 focus:ring-offset-0"
+                    required
+                  />
+                  <span className="text-sm text-gray-400">
+                    I agree to the{' '}
+                    <a href="#" className="text-primary-400 hover:text-primary-300">Terms of Service</a>
+                    {' '}and{' '}
+                    <a href="#" className="text-primary-400 hover:text-primary-300">Privacy Policy</a>
+                  </span>
+                </div>
+
                 <button
-                  type="button"
-                  onClick={() => setShowPassword(!showPassword)}
-                  className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 hover:text-white"
+                  type="submit"
+                  disabled={isLoading || otpSending}
+                  className="w-full btn-primary flex items-center justify-center gap-2"
                 >
-                  {showPassword ? <HiEyeOff className="w-5 h-5" /> : <HiEye className="w-5 h-5" />}
+                  {otpSending ? (
+                    <>
+                      <div className="w-5 h-5 border-2 border-white/20 border-t-white rounded-full animate-spin"></div>
+                      Sending Verification...
+                    </>
+                  ) : (
+                    'Continue with Email Verification'
+                  )}
                 </button>
-              </div>
-              <p className="mt-2 text-xs text-gray-500">
-                Must be at least 8 characters with a number and symbol
+              </form>
+
+              <p className="mt-8 text-center text-gray-400">
+                Already have an account?{' '}
+                <Link to="/login" className="text-primary-400 hover:text-primary-300 font-medium">
+                  Sign in
+                </Link>
               </p>
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-300 mb-2">
-                Confirm Password
-              </label>
-              <div className="relative">
-                <HiLockClosed className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 w-5 h-5" />
-                <input
-                  type={showPassword ? 'text' : 'password'}
-                  name="confirmPassword"
-                  value={formData.confirmPassword}
-                  onChange={handleChange}
-                  placeholder="Confirm your password"
-                  className="input-field-dark pl-12"
-                  required
-                />
-              </div>
-            </div>
-
-            <div className="flex items-start gap-3">
-              <input
-                type="checkbox"
-                name="agreeTerms"
-                checked={formData.agreeTerms}
-                onChange={handleChange}
-                className="w-4 h-4 mt-1 rounded border-white/20 bg-white/5 text-primary-600 
-                  focus:ring-primary-500 focus:ring-offset-0"
-                required
-              />
-              <span className="text-sm text-gray-400">
-                I agree to the{' '}
-                <a href="#" className="text-primary-400 hover:text-primary-300">Terms of Service</a>
-                {' '}and{' '}
-                <a href="#" className="text-primary-400 hover:text-primary-300">Privacy Policy</a>
-              </span>
-            </div>
-
-            <button
-              type="submit"
-              disabled={isLoading || otpSending}
-              className="w-full btn-primary flex items-center justify-center gap-2"
-            >
-              {otpSending ? (
-                <>
-                  <div className="w-5 h-5 border-2 border-white/20 border-t-white rounded-full animate-spin"></div>
-                  Sending OTP...
-                </>
-              ) : (
-                'Continue with Email Verification'
-              )}
-            </button>
-          </form>
-
-          <p className="mt-8 text-center text-gray-400">
-            Already have an account?{' '}
-            <Link to="/login" className="text-primary-400 hover:text-primary-300 font-medium">
-              Sign in
-            </Link>
-          </p>
             </>
           ) : (
             /* Step 2: OTP Verification */
@@ -484,8 +480,8 @@ const Register = () => {
                     onChange={(e) => handleOtpChange(index, e.target.value)}
                     onKeyDown={(e) => handleOtpKeyDown(index, e)}
                     onPaste={handleOtpPaste}
-                    className="w-12 h-14 text-center text-2xl font-bold bg-dark-100/50 border border-white/20 
-                      rounded-xl text-white focus:border-primary-500 focus:ring-2 focus:ring-primary-500/20 
+                    className="w-12 h-14 text-center text-2xl font-bold bg-dark-100/50 border border-white/20
+                      rounded-xl text-white focus:border-primary-500 focus:ring-2 focus:ring-primary-500/20
                       transition-all outline-none"
                   />
                 ))}
@@ -500,7 +496,7 @@ const Register = () => {
                 {isLoading ? (
                   <>
                     <div className="w-5 h-5 border-2 border-white/20 border-t-white rounded-full animate-spin"></div>
-                    Verifying...
+                    Creating Account...
                   </>
                 ) : (
                   'Verify & Create Account'

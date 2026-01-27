@@ -1,10 +1,10 @@
 import { useState, useEffect } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { HiMenu, HiX, HiShieldCheck, HiUpload, HiCollection, HiCog, HiLogout, HiViewGrid } from 'react-icons/hi';
+import { HiMenu, HiX, HiShieldCheck, HiUpload, HiCollection, HiCog, HiLogout, HiViewGrid, HiUser, HiSwitchHorizontal } from 'react-icons/hi';
 import Logo from './Logo';
-import ThemeToggle from './ThemeToggle';
 import api from '../services/api';
+import { useAuth } from '../contexts/AuthContext';
 
 const Navbar = () => {
   const [isScrolled, setIsScrolled] = useState(false);
@@ -12,10 +12,10 @@ const Navbar = () => {
   const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
   const location = useLocation();
   const navigate = useNavigate();
-  
+  const { user, accounts, logout, logoutAll, switchAccount, removeAccount } = useAuth();
+
   // Get authentication state
-  const isAuthenticated = api.isAuthenticated();
-  const user = api.getCurrentUser();
+  const isAuthenticated = !!user;
 
   // Check if we're on landing page
   const isLandingPage = location.pathname === '/';
@@ -29,8 +29,25 @@ const Navbar = () => {
   }, []);
 
   const handleLogout = () => {
-    api.logout();
-    navigate('/login');
+    logout();
+    setIsUserMenuOpen(false);
+    setIsMobileMenuOpen(false);
+  };
+
+  const handleLogoutAll = () => {
+    logoutAll();
+    setIsUserMenuOpen(false);
+    setIsMobileMenuOpen(false);
+  };
+
+  const handleSwitchAccount = (accountId) => {
+    switchAccount(accountId);
+    setIsUserMenuOpen(false);
+    setIsMobileMenuOpen(false);
+  };
+
+  const handleRemoveAccount = (accountId) => {
+    removeAccount(accountId);
     setIsUserMenuOpen(false);
     setIsMobileMenuOpen(false);
   };
@@ -111,8 +128,6 @@ const Navbar = () => {
 
           {/* Auth Buttons / User Menu */}
           <div className="hidden md:flex items-center gap-3">
-            <ThemeToggle />
-            
             {/* Verify Now Button - Always visible */}
             <Link
               to="/verify"
@@ -173,6 +188,36 @@ const Navbar = () => {
                             <HiViewGrid className="w-4 h-4" />
                             Dashboard
                           </Link>
+                          
+                          {/* Account Switcher */}
+                          {accounts.length > 1 && (
+                            <>
+                              <div className="border-t border-white/10 my-2"></div>
+                              <div className="px-3 py-1">
+                                <p className="text-xs text-gray-400 uppercase tracking-wide mb-2">Switch Account</p>
+                                {accounts.filter(acc => acc.id !== user?.id && acc.user.email !== user?.email).map((account) => (
+                                  <button
+                                    key={account.id}
+                                    onClick={() => handleSwitchAccount(account.id)}
+                                    className="flex items-center gap-3 w-full px-2 py-2 rounded-lg text-gray-300 
+                                      hover:text-white hover:bg-white/5 transition-all text-left"
+                                  >
+                                    <div className="w-6 h-6 rounded-lg bg-gradient-to-br from-primary-600 to-accent-600 
+                                      flex items-center justify-center text-white font-bold text-xs">
+                                      {account.user.name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2)}
+                                    </div>
+                                    <div className="flex-1 min-w-0">
+                                      <p className="text-sm truncate">{account.user.name}</p>
+                                      <p className="text-xs text-gray-400 truncate">{account.user.email}</p>
+                                    </div>
+                                    <HiSwitchHorizontal className="w-4 h-4" />
+                                  </button>
+                                ))}
+                              </div>
+                            </>
+                          )}
+                          
+                          <div className="border-t border-white/10 my-2"></div>
                           <button
                             onClick={handleLogout}
                             className="flex items-center gap-3 px-3 py-2 w-full rounded-lg 
@@ -181,6 +226,16 @@ const Navbar = () => {
                             <HiLogout className="w-4 h-4" />
                             Sign Out
                           </button>
+                          {accounts.length > 1 && (
+                            <button
+                              onClick={handleLogoutAll}
+                              className="flex items-center gap-3 px-3 py-2 w-full rounded-lg 
+                                text-red-400 hover:text-red-300 hover:bg-red-500/10 transition-all"
+                            >
+                              <HiLogout className="w-4 h-4" />
+                              Sign Out All
+                            </button>
+                          )}
                         </div>
                       </motion.div>
                     </>

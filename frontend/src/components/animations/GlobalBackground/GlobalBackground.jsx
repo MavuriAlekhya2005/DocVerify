@@ -1,5 +1,6 @@
 import { useEffect, useRef, memo } from 'react';
 import { Renderer, Program, Mesh, Color, Triangle } from 'ogl';
+import './GlobalBackground.css';
 
 /**
  * GlobalBackground - Full viewport Galaxy background

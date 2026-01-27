@@ -648,12 +648,12 @@ const WYSIWYGEditor = ({ template, documentType, documentId, onSave, onExport })
   const isActiveLocked = activeObject?.isLocked;
 
   return (
-    <div className="h-full flex bg-gray-100">
+    <div className="h-full flex bg-gray-900">
       {/* Sidebar Toggle Button (visible when collapsed) */}
       {sidebarCollapsed && (
         <button
           onClick={() => setSidebarCollapsed(false)}
-          className="fixed left-2 top-20 z-50 p-2 bg-white border border-gray-200 rounded-lg shadow-md hover:bg-gray-50"
+          className="fixed left-2 top-20 z-50 p-2 bg-gray-800 border border-gray-600 rounded-lg shadow-md hover:bg-gray-700 text-white"
           title="Show Sidebar"
         >
           <HiMenuAlt2 className="w-5 h-5" />
@@ -661,9 +661,9 @@ const WYSIWYGEditor = ({ template, documentType, documentId, onSave, onExport })
       )}
 
       {/* Left Sidebar - Elements */}
-      <div className={`${sidebarCollapsed ? 'hidden' : 'w-56'} bg-white border-r border-gray-200 p-4 overflow-y-auto flex-shrink-0 transition-all`}>
+      <div className={`${sidebarCollapsed ? 'hidden' : 'w-56'} bg-gray-800 border-r border-gray-600 p-4 overflow-y-auto flex-shrink-0 transition-all`}>
         <div className="flex items-center justify-between mb-3">
-          <h3 className="text-xs font-semibold text-gray-500 uppercase">Add Elements</h3>
+          <h3 className="text-xs font-semibold text-gray-300 uppercase">Add Elements</h3>
           <button
             onClick={() => setSidebarCollapsed(true)}
             className="p-1 hover:bg-gray-100 rounded"
@@ -677,20 +677,20 @@ const WYSIWYGEditor = ({ template, documentType, documentId, onSave, onExport })
         <div className="space-y-2 mb-6">
           <button
             onClick={() => addText('heading')}
-            className="w-full p-2 text-left text-sm bg-gray-50 hover:bg-blue-50 hover:text-blue-600 rounded border border-gray-200 transition-colors"
+            className="w-full p-2 text-left text-sm bg-gray-700 hover:bg-gray-600 hover:text-white rounded border border-gray-600 transition-colors text-gray-300"
           >
             + Heading
           </button>
           <button
             onClick={() => addText('body')}
-            className="w-full p-2 text-left text-sm bg-gray-50 hover:bg-blue-50 hover:text-blue-600 rounded border border-gray-200 transition-colors"
+            className="w-full p-2 text-left text-sm bg-gray-700 hover:bg-gray-600 hover:text-white rounded border border-gray-600 transition-colors text-gray-300"
           >
             + Body Text
           </button>
         </div>
 
         {/* Shapes */}
-        <h3 className="text-xs font-semibold text-gray-500 uppercase mb-3">Shapes</h3>
+        <h3 className="text-xs font-semibold text-gray-300 uppercase mb-3">Shapes</h3>
         <div className="grid grid-cols-3 gap-2 mb-6">
           <button onClick={() => addShape('rect')} className="p-3 bg-gray-50 hover:bg-blue-50 rounded border border-gray-200">
             <div className="w-6 h-4 bg-blue-500 rounded-sm mx-auto" />
@@ -706,18 +706,18 @@ const WYSIWYGEditor = ({ template, documentType, documentId, onSave, onExport })
         {/* Image */}
         <button
           onClick={addImage}
-          className="w-full p-2 text-left text-sm bg-gray-50 hover:bg-blue-50 hover:text-blue-600 rounded border border-gray-200 transition-colors flex items-center gap-2"
+          className="w-full p-2 text-left text-sm bg-gray-700 hover:bg-gray-600 hover:text-white rounded border border-gray-600 transition-colors flex items-center gap-2 text-gray-300"
         >
           <HiPhotograph className="w-4 h-4" />
           Upload Image
         </button>
 
         {/* Code Type Switcher */}
-        <div className="mt-6 pt-4 border-t border-gray-200">
-          <h3 className="text-xs font-semibold text-gray-500 uppercase mb-3">Verification Code</h3>
+        <div className="mt-6 pt-4 border-t border-gray-600">
+          <h3 className="text-xs font-semibold text-gray-300 uppercase mb-3">Verification Code</h3>
           <button
             onClick={switchCodeType}
-            className="w-full p-2 text-sm bg-gray-50 hover:bg-blue-50 hover:text-blue-600 rounded border border-gray-200 transition-colors flex items-center gap-2"
+            className="w-full p-2 text-sm bg-gray-700 hover:bg-gray-600 hover:text-white rounded border border-gray-600 transition-colors flex items-center gap-2 text-gray-300"
           >
             <HiQrcode className="w-4 h-4" />
             Switch to {codeType === 'qr' ? 'Barcode' : 'QR Code'}
@@ -728,7 +728,7 @@ const WYSIWYGEditor = ({ template, documentType, documentId, onSave, onExport })
         </div>
 
         {/* Layers */}
-        <h3 className="text-xs font-semibold text-gray-500 uppercase mt-6 mb-3">Layers ({layers.length})</h3>
+        <h3 className="text-xs font-semibold text-gray-300 uppercase mt-6 mb-3">Layers ({layers.length})</h3>
         <div className="space-y-1 max-h-48 overflow-y-auto">
           {[...layers].reverse().map((layer, idx) => (
             <div
@@ -742,8 +742,8 @@ const WYSIWYGEditor = ({ template, documentType, documentId, onSave, onExport })
               }}
               className={`p-2 text-xs rounded cursor-pointer truncate flex items-center gap-1 ${
                 activeObject === canvas?.getObjects()[layers.length - 1 - idx]
-                  ? 'bg-blue-100 text-blue-700'
-                  : 'bg-gray-50 hover:bg-gray-100'
+                  ? 'bg-blue-900/50 text-blue-300 border border-blue-700'
+                  : 'bg-gray-700/50 hover:bg-gray-600/50 text-gray-300 hover:text-white'
               }`}
             >
               {layer.isLocked && <HiLockClosed className="w-3 h-3 text-amber-500" />}
@@ -756,13 +756,13 @@ const WYSIWYGEditor = ({ template, documentType, documentId, onSave, onExport })
       {/* Main Canvas Area */}
       <div className="flex-1 flex flex-col min-w-0">
         {/* Toolbar */}
-        <div className="h-12 bg-white border-b border-gray-200 px-4 flex items-center justify-between flex-shrink-0">
+        <div className="h-12 bg-gray-800 border-b border-gray-600 px-4 flex items-center justify-between flex-shrink-0">
           <div className="flex items-center gap-2">
             {/* Undo/Redo */}
             <button 
               onClick={undo} 
               disabled={historyIndex <= 0}
-              className={`p-1.5 rounded ${historyIndex <= 0 ? 'text-gray-300' : 'hover:bg-gray-100'}`}
+              className={`p-1.5 rounded ${historyIndex <= 0 ? 'text-gray-500' : 'hover:bg-gray-700 text-gray-300'}`}
               title="Undo (Ctrl+Z)"
             >
               <HiReply className="w-4 h-4" />
@@ -770,20 +770,20 @@ const WYSIWYGEditor = ({ template, documentType, documentId, onSave, onExport })
             <button 
               onClick={redo} 
               disabled={historyIndex >= history.length - 1}
-              className={`p-1.5 rounded ${historyIndex >= history.length - 1 ? 'text-gray-300' : 'hover:bg-gray-100'}`}
+              className={`p-1.5 rounded ${historyIndex >= history.length - 1 ? 'text-gray-500' : 'hover:bg-gray-700 text-gray-300'}`}
               title="Redo (Ctrl+Y)"
             >
               <HiReply className="w-4 h-4 transform scale-x-[-1]" />
             </button>
 
-            <div className="w-px h-6 bg-gray-200 mx-2" />
+            <div className="w-px h-6 bg-gray-600 mx-2" />
 
             {/* Zoom */}
-            <button onClick={() => handleZoom(-0.1)} className="p-1.5 hover:bg-gray-100 rounded">
+            <button onClick={() => handleZoom(-0.1)} className="p-1.5 hover:bg-gray-700 rounded text-gray-300">
               <HiZoomOut className="w-4 h-4" />
             </button>
-            <span className="text-sm w-14 text-center">{Math.round(zoom * 100)}%</span>
-            <button onClick={() => handleZoom(0.1)} className="p-1.5 hover:bg-gray-100 rounded">
+            <span className="text-sm w-14 text-center text-gray-300">{Math.round(zoom * 100)}%</span>
+            <button onClick={() => handleZoom(0.1)} className="p-1.5 hover:bg-gray-700 rounded text-gray-300">
               <HiZoomIn className="w-4 h-4" />
             </button>
 
@@ -847,14 +847,14 @@ const WYSIWYGEditor = ({ template, documentType, documentId, onSave, onExport })
       </div>
 
       {/* Right Sidebar - Properties */}
-      <div className="w-56 bg-white border-l border-gray-200 p-4 overflow-y-auto flex-shrink-0">
-        <h3 className="text-xs font-semibold text-gray-500 uppercase mb-3">Properties</h3>
+      <div className="w-56 bg-gray-800 border-l border-gray-600 p-4 overflow-y-auto flex-shrink-0">
+        <h3 className="text-xs font-semibold text-gray-300 uppercase mb-3">Properties</h3>
         
         {activeObject ? (
           <div className="space-y-4">
             {/* Locked indicator */}
             {isActiveLocked && (
-              <div className="p-2 bg-amber-50 border border-amber-200 rounded text-xs text-amber-700 flex items-center gap-2">
+              <div className="p-2 bg-amber-900/30 border border-amber-600 rounded text-xs text-amber-300 flex items-center gap-2">
                 <HiLockClosed className="w-4 h-4" />
                 This element cannot be deleted
               </div>
@@ -863,21 +863,21 @@ const WYSIWYGEditor = ({ template, documentType, documentId, onSave, onExport })
             {/* Position */}
             <div className="grid grid-cols-2 gap-2">
               <div>
-                <label className="text-xs text-gray-500">X</label>
+                <label className="text-xs text-gray-300">X</label>
                 <input
                   type="number"
                   value={Math.round(activeObject.left || 0)}
                   onChange={(e) => updateProperty('left', parseInt(e.target.value) || 0)}
-                  className="w-full px-2 py-1 border border-gray-200 rounded text-sm"
+                  className="w-full px-2 py-1 bg-gray-700 border border-gray-600 rounded text-sm text-gray-300"
                 />
               </div>
               <div>
-                <label className="text-xs text-gray-500">Y</label>
+                <label className="text-xs text-gray-300">Y</label>
                 <input
                   type="number"
                   value={Math.round(activeObject.top || 0)}
                   onChange={(e) => updateProperty('top', parseInt(e.target.value) || 0)}
-                  className="w-full px-2 py-1 border border-gray-200 rounded text-sm"
+                  className="w-full px-2 py-1 bg-gray-700 border border-gray-600 rounded text-sm text-gray-300"
                 />
               </div>
             </div>
@@ -885,7 +885,7 @@ const WYSIWYGEditor = ({ template, documentType, documentId, onSave, onExport })
             {/* Rotation - only if not locked */}
             {!isActiveLocked && (
               <div>
-                <label className="text-xs text-gray-500">Rotation</label>
+                <label className="text-xs text-gray-300">Rotation</label>
                 <input
                   type="range"
                   min="0"
@@ -894,14 +894,14 @@ const WYSIWYGEditor = ({ template, documentType, documentId, onSave, onExport })
                   onChange={(e) => updateProperty('angle', parseInt(e.target.value))}
                   className="w-full"
                 />
-                <span className="text-xs text-gray-500">{Math.round(activeObject.angle || 0)}°</span>
+                <span className="text-xs text-gray-400">{Math.round(activeObject.angle || 0)}°</span>
               </div>
             )}
 
             {/* Color */}
             {activeObject.fill !== undefined && activeObject.type !== 'line' && !isActiveLocked && (
               <div>
-                <label className="text-xs text-gray-500">Fill Color</label>
+                <label className="text-xs text-gray-300">Fill Color</label>
                 <input
                   type="color"
                   value={activeObject.fill || '#000000'}
@@ -915,22 +915,22 @@ const WYSIWYGEditor = ({ template, documentType, documentId, onSave, onExport })
             {(activeObject.type === 'i-text' || activeObject.type === 'text') && !isActiveLocked && (
               <>
                 <div>
-                  <label className="text-xs text-gray-500">Font Size</label>
+                  <label className="text-xs text-gray-300">Font Size</label>
                   <input
                     type="number"
                     value={activeObject.fontSize || 16}
                     onChange={(e) => updateProperty('fontSize', parseInt(e.target.value) || 16)}
-                    className="w-full px-2 py-1 border border-gray-200 rounded text-sm"
+                    className="w-full px-2 py-1 bg-gray-700 border border-gray-600 rounded text-sm text-gray-300"
                   />
                 </div>
                 
                 {/* Font Family */}
                 <div>
-                  <label className="text-xs text-gray-500">Font Family</label>
+                  <label className="text-xs text-gray-300">Font Family</label>
                   <select
                     value={activeObject.fontFamily || 'Arial'}
                     onChange={(e) => updateProperty('fontFamily', e.target.value)}
-                    className="w-full px-2 py-1 border border-gray-200 rounded text-sm"
+                    className="w-full px-2 py-1 bg-gray-700 border border-gray-600 rounded text-sm text-gray-300"
                   >
                     <option value="Arial">Arial</option>
                     <option value="Times New Roman">Times New Roman</option>
@@ -947,21 +947,21 @@ const WYSIWYGEditor = ({ template, documentType, documentId, onSave, onExport })
                 <div className="flex gap-1">
                   <button
                     onClick={() => updateProperty('fontWeight', activeObject.fontWeight === 'bold' ? 'normal' : 'bold')}
-                    className={`flex-1 p-1.5 rounded border text-sm font-bold ${activeObject.fontWeight === 'bold' ? 'bg-blue-100 border-blue-300' : 'border-gray-200'}`}
+                    className={`flex-1 p-1.5 rounded border text-sm font-bold text-gray-300 ${activeObject.fontWeight === 'bold' ? 'bg-blue-900/50 border-blue-600 text-blue-300' : 'border-gray-600 bg-gray-700 hover:bg-gray-600'}`}
                     title="Bold"
                   >
                     B
                   </button>
                   <button
                     onClick={() => updateProperty('fontStyle', activeObject.fontStyle === 'italic' ? 'normal' : 'italic')}
-                    className={`flex-1 p-1.5 rounded border text-sm italic ${activeObject.fontStyle === 'italic' ? 'bg-blue-100 border-blue-300' : 'border-gray-200'}`}
+                    className={`flex-1 p-1.5 rounded border text-sm italic text-gray-300 ${activeObject.fontStyle === 'italic' ? 'bg-blue-900/50 border-blue-600 text-blue-300' : 'border-gray-600 bg-gray-700 hover:bg-gray-600'}`}
                     title="Italic"
                   >
                     I
                   </button>
                   <button
                     onClick={() => updateProperty('underline', !activeObject.underline)}
-                    className={`flex-1 p-1.5 rounded border text-sm underline ${activeObject.underline ? 'bg-blue-100 border-blue-300' : 'border-gray-200'}`}
+                    className={`flex-1 p-1.5 rounded border text-sm underline text-gray-300 ${activeObject.underline ? 'bg-blue-900/50 border-blue-600 text-blue-300' : 'border-gray-600 bg-gray-700 hover:bg-gray-600'}`}
                     title="Underline"
                   >
                     U
@@ -970,25 +970,25 @@ const WYSIWYGEditor = ({ template, documentType, documentId, onSave, onExport })
 
                 {/* Text Alignment */}
                 <div>
-                  <label className="text-xs text-gray-500">Text Align</label>
+                  <label className="text-xs text-gray-300">Text Align</label>
                   <div className="flex gap-1 mt-1">
                     <button
                       onClick={() => updateProperty('textAlign', 'left')}
-                      className={`flex-1 p-1.5 rounded border text-xs ${activeObject.textAlign === 'left' ? 'bg-blue-100 border-blue-300' : 'border-gray-200'}`}
+                      className={`flex-1 p-1.5 rounded border text-xs text-gray-300 ${activeObject.textAlign === 'left' ? 'bg-blue-900/50 border-blue-600 text-blue-300' : 'border-gray-600 bg-gray-700 hover:bg-gray-600'}`}
                       title="Align Left"
                     >
                       ⫷
                     </button>
                     <button
                       onClick={() => updateProperty('textAlign', 'center')}
-                      className={`flex-1 p-1.5 rounded border text-xs ${activeObject.textAlign === 'center' ? 'bg-blue-100 border-blue-300' : 'border-gray-200'}`}
+                      className={`flex-1 p-1.5 rounded border text-xs text-gray-300 ${activeObject.textAlign === 'center' ? 'bg-blue-900/50 border-blue-600 text-blue-300' : 'border-gray-600 bg-gray-700 hover:bg-gray-600'}`}
                       title="Align Center"
                     >
                       ☰
                     </button>
                     <button
                       onClick={() => updateProperty('textAlign', 'right')}
-                      className={`flex-1 p-1.5 rounded border text-xs ${activeObject.textAlign === 'right' ? 'bg-blue-100 border-blue-300' : 'border-gray-200'}`}
+                      className={`flex-1 p-1.5 rounded border text-xs text-gray-300 ${activeObject.textAlign === 'right' ? 'bg-blue-900/50 border-blue-600 text-blue-300' : 'border-gray-600 bg-gray-700 hover:bg-gray-600'}`}
                       title="Align Right"
                     >
                       ⫸
@@ -1001,7 +1001,7 @@ const WYSIWYGEditor = ({ template, documentType, documentId, onSave, onExport })
             {/* Opacity */}
             {!isActiveLocked && (
               <div>
-                <label className="text-xs text-gray-500">Opacity</label>
+                <label className="text-xs text-gray-300">Opacity</label>
                 <input
                   type="range"
                   min="0"
@@ -1022,9 +1022,9 @@ const WYSIWYGEditor = ({ template, documentType, documentId, onSave, onExport })
 
         {/* Document Info */}
         {documentId && (
-          <div className="mt-6 pt-4 border-t border-gray-200">
-            <h3 className="text-xs font-semibold text-gray-500 uppercase mb-2">Document</h3>
-            <p className="text-xs font-mono text-gray-600 break-all">{documentId}</p>
+          <div className="mt-6 pt-4 border-t border-gray-600">
+            <h3 className="text-xs font-semibold text-gray-300 uppercase mb-2">Document</h3>
+            <p className="text-xs font-mono text-gray-400 break-all">{documentId}</p>
           </div>
         )}
 

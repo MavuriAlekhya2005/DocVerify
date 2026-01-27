@@ -1,6 +1,7 @@
 import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
 import { Toaster } from 'react-hot-toast';
 import { Suspense, lazy } from 'react';
+import { useLocation } from 'react-router-dom';
 import GlobalBackground from './components/animations/GlobalBackground/GlobalBackground';
 import TargetCursor from './components/animations/TargetCursor/TargetCursor';
 import { AuthProvider } from './contexts/AuthContext';
@@ -49,10 +50,15 @@ const Users = lazy(() => import('./pages/dashboard/admin/Users'));
 const Settings = lazy(() => import('./pages/dashboard/Settings'));
 
 function AppContent() {
+  const location = useLocation();
+  
+  // Show galaxy background on landing page, login, and register pages
+  const showGalaxyBackground = ['/', '/login', '/register'].includes(location.pathname);
+  
   return (
     <>
       {/* Global Background - Full viewport galaxy */}
-      <GlobalBackground />
+      {showGalaxyBackground && <GlobalBackground />}
       
       {/* Global Custom Cursor - Target style with spinning corners */}
       <TargetCursor 

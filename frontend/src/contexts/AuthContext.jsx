@@ -14,6 +14,7 @@ export const AuthProvider = ({ children }) => {
   const location = useLocation();
   const [isAuthenticated, setIsAuthenticated] = useState(api.isAuthenticated());
   const [user, setUser] = useState(api.getCurrentUser());
+  const [accounts, setAccounts] = useState(api.getStoredAccounts());
 
   // Check session and handle expiry
   const checkSession = useCallback(() => {
@@ -23,6 +24,7 @@ export const AuthProvider = ({ children }) => {
     if (wasAuthenticated && !sessionValid) {
       setIsAuthenticated(false);
       setUser(null);
+      setAccounts(api.getStoredAccounts());
       toast.error('Session expired. Please log in again.');
       
       // Redirect to login with return URL
@@ -62,6 +64,7 @@ export const AuthProvider = ({ children }) => {
     const handleStorageChange = () => {
       setIsAuthenticated(api.isAuthenticated());
       setUser(api.getCurrentUser());
+      setAccounts(api.getStoredAccounts());
     };
 
     window.addEventListener('storage', handleStorageChange);
@@ -74,6 +77,7 @@ export const AuthProvider = ({ children }) => {
     if (result.success) {
       setIsAuthenticated(true);
       setUser(result.data.user);
+      setAccounts(api.getStoredAccounts());
     }
     return result;
   };
@@ -83,14 +87,54 @@ export const AuthProvider = ({ children }) => {
     api.logout();
     setIsAuthenticated(false);
     setUser(null);
+    setAccounts(api.getStoredAccounts());
     navigate('/login');
   }, [navigate]);
+
+  // Logout all accounts
+  const logoutAll = useCallback(() => {
+    api.logoutAll();
+    setIsAuthenticated(false);
+    setUser(null);
+    setAccounts([]);
+    navigate('/login');
+  }, [navigate]);
+
+  // Switch account
+  const switchAccount = useCallback((accountId) => {
+    if (api.switchAccount(accountId)) {
+      setIsAuthenticated(true);
+      setUser(api.getCurrentUser());
+      setAccounts(api.getStoredAccounts());
+      toast.success('Switched account successfully');
+      // Redirect to dashboard
+      navigate('/dashboard');
+    } else {
+      toast.error('Failed to switch account');
+    }
+  }, [navigate]);
+
+  // Remove account
+  const removeAccount = useCallback((accountId) => {
+    api.removeAccount(accountId);
+    setAccounts(api.getStoredAccounts());
+    // If we removed the active account, update state
+    if (!api.isAuthenticated()) {
+      setIsAuthenticated(false);
+      setUser(null);
+    }
+    toast.success('Account removed');
+  }, []);
 
   const value = {
     isAuthenticated,
     user,
+    accounts,
     login,
     logout,
+    logoutAll,
+    switchAccount,
+    removeAccount,
     checkSession,
     getSessionTimeRemaining: api.getSessionTimeRemaining,
   };

@@ -13,7 +13,6 @@ import {
   HiPencilAlt
 } from 'react-icons/hi';
 import Logo from '../../components/Logo';
-import ThemeToggle from '../../components/ThemeToggle';
 import Breadcrumb from '../../components/Breadcrumb';
 import GlassNavIcon from '../../components/animations/GlassIcons/GlassNavIcon';
 import UserDropdown from '../../components/UserDropdown';
@@ -174,8 +173,6 @@ const UserDashboard = () => {
               <button className="relative text-gray-400 hover:text-white p-2 rounded-xl hover:bg-white/5">
                 <HiBell className="w-6 h-6" />
               </button>
-              
-              <ThemeToggle />
               
               {/* User Dropdown with Sign Out */}
               <UserDropdown />
